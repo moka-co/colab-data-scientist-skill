@@ -93,9 +93,10 @@ Tools to rapidly diagnose schemas, missingness patterns, and generate automated 
 
 | Library | pip package | Engine Compatibility | Primary Use Case & Notes |
 |---|---|---|---|
-| **ydata-profiling** | `ydata-profiling` | `pandas` | Automated HTML EDA reports. Generates complete summary reports (correlations, missingness, distributions) with a single command. |
-| **missingno** | `missingno` | `pandas` | Missing data visualization. Visual matrices, heatmaps, and dendrograms of missing value distributions. |
+| **ydata-profiling** | `ydata-profiling` | `pandas` | Automated HTML EDA reports. Pandas-only; slow on wide datasets (> 50 cols); recommended only in polished mode on downsampled data (N <= 10,000). |
+| **missingno** | `missingno` | `pandas` | Missing data visualization. Fast visual matrices, heatmaps, and dendrograms of missing value distributions. |
 | **Sweetviz** | `sweetviz` | `pandas` | Target-oriented EDA & dataset comparison. Generates high-density visual comparison between train and test datasets. |
+| **D-Tale** | `dtale` | `pandas` | Interactive visual data exploration. Lightweight web GUI embedded inside Jupyter/Colab notebooks for viewing and transforming data. |
 | **Great Expectations** | `great-expectations` | `both` | Data profiling & contract assertion. Asserts schema integrity and statistical invariants during ingestion. |
 
 ---

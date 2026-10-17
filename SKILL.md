@@ -16,23 +16,23 @@ Multi-agent data science workflow in which the **Main Orchestrator** coordinates
 | Tier | Subagent Name | Spec File | Role & When to Invoke |
 |---|---|---|---|
 | **Support** | `dataset-discovery-agent` | [`agents/support/dataset-discovery-agent.md`](agents/support/dataset-discovery-agent.md) | Searches Kaggle, HuggingFace, OpenML, UCI, and web hubs (API-first with `search_web`/`exa` fallback); reports license, size, recency, and auth requirements; asks user via Orchestrator before filtering ambiguous results. |
-| **Notebook** | `env-setup-agent` | [`agents/notebook/env-setup-agent.md`](agents/notebook/env-setup-agent.md) | Inspects repos, pins/installs packages (`!{sys.executable} -m pip install`), retrieves Colab `userdata` secrets, sets global seeds, and logs hardware/library versions. |
+| **Notebook** | `env-setup-agent` | [`agents/notebook/env-setup-agent.md`](agents/notebook/env-setup-agent.md) | Reads repo manifests, probes live Colab environment, pins added packages while protecting core stack, detects hardware mismatches and C-extension restarts, retrieves `userdata` secrets, sets seeds, and runs smoke tests. |
 | **Notebook** | `eda-agent` | [`agents/notebook/eda-agent.md`](agents/notebook/eda-agent.md) | Runs task-adaptive EDA (Tabular, NLP/LLM, CV, Time Series, RL), logs dataset provenance/checksums, and prints schemas, anomalies, and exploratory plots. |
 | **Notebook** | `data-cleaning-agent` | [`agents/notebook/data-cleaning-agent.md`](agents/notebook/data-cleaning-agent.md) | Executes task-adaptive preprocessing, tokenization, augmentations, or leak-free splits (`Quick Exploration` inline cells by default, or `Polished Deliverable` `.py` scripts + checkpoints). |
 | **Notebook** | `model-training-agent` | [`agents/notebook/model-training-agent.md`](agents/notebook/model-training-agent.md) | Establishes a task-appropriate baseline first, trains candidate models, logs experiment comparisons, and creates task-conditional diagnostics and explainability plots. |
 | **Notebook** | `inference-agent` | [`agents/notebook/inference-agent.md`](agents/notebook/inference-agent.md) | Runs single/batched inference and latency benchmarks using in-notebook trained models or user-selected pretrained checkpoints. |
 | **Notebook** | `critic-agent` | [`agents/notebook/critic-agent.md`](agents/notebook/critic-agent.md) | Audits `<subagent_name>_tasks.md` against live Colab outputs; separates safe leaf/display fixes (`SAFE_AUTO_FIXES`) from training/data-mutating changes (`ESCALATED_FIXES`). |
 
-> **Subagent Definition Rules**: Define (`define_subagent`) and invoke (`invoke_subagent` with `Model: "inherit"`) only the subagents needed for the user's task. Set `enable_mcp_tools: false` for all `agents/notebook/*` subagents (`true` only for `dataset-discovery-agent` web search), `enable_write_tools: true` (strictly for writing `<subagent_name>_tasks.md`), and `enable_subagent_tools: false`.
+> **Subagent Definition Rules**: Define (`define_subagent`) and invoke (`invoke_subagent` with `Model: "inherit"`) only the subagents needed for the user's task. Set `enable_mcp_tools: false` for all `agents/notebook/*` subagents (`true` only for `dataset-discovery-agent` web search), `enable_write_tools: true` (strictly for writing `<subagent_name>_tasks.md`), and `enable_subagent_tools: false`. Notebook subagents use built-in read tools to inspect repository manifests and code entrypoints.
 
 ---
 
 ## Main Orchestrator Workflow Contract
 
 ### 0. Standalone Discovery vs. Existing Notebook vs. New Notebook
-- **Standalone Support Mode (No Notebook)**: If the user only wants to explore datasets or survey a domain, invoke `dataset-discovery-agent` (`agents/support/dataset-discovery-agent.md`) directly—do **not** open Colab or spawn notebook subagents. If it returns `NEEDS_USER_CLARIFICATION`, pass its `CLARIFICATION_QUESTIONS` to `ask_question` and send the user's answers back via `send_message`.
+- **Standalone Support Mode (No Notebook)**: If the user only wants to explore datasets or survey a domain, invoke `dataset-discovery-agent` directly—do **not** open Colab or spawn notebook subagents. If it returns `NEEDS_USER_CLARIFICATION`, pass its questions to `ask_question` and send user answers back via `send_message`.
 - **Out-of-Pipeline Scope Check**: If the user's task centers on an `[Out-of-Pipeline]` domain in [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md) (§8 Optimization/SAT/SMT/Planning, §17 Simulation/Physics, §27 Federated Learning, §28 Model Serving/APIs), do **not** force standard tabular EDA/Cleaning; clarify workflow expectations via `ask_question`.
-- **Existing Notebook Entry Flow**: If the user is editing or debugging an existing notebook (in an open Colab tab or Google Drive), read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) first: call `get_cells(includeOutputs=False)` to inventory existing imports, engine, and completed phases, and run **only** the phases needed for the requested change.
+- **Existing Notebook Entry Flow**: If editing an existing notebook, read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) first: call `get_cells(includeOutputs=False)` to inventory existing imports, engine, and completed phases, and run **only** the phases needed for the requested change.
 
 ### 1. Upfront Session Configuration & Task Checklist (`task.md`)
 Before starting a new notebook pipeline (or after dataset selection via `dataset-discovery-agent`), consolidate any unspecified preferences into a **single** `ask_question` call and record them in `task.md`:
@@ -42,20 +42,22 @@ Before starting a new notebook pipeline (or after dataset selection via `dataset
 2. **Dataframe Engine** (for tabular tasks when not specified by user or existing notebook): `Polars`, `Pandas`, `DuckDB`, or `PySpark`.
 3. **Once-Per-Session Google Drive Sync Policy**: Ask **once** whether to sync the `.ipynb` notebook (and any optional scripts/checkpoints) to Google Drive at the end of the workflow or keep exports local only. Remember and honor this answer for the entire session.
 
-Write the tailored phase checklist to `task.md` (e.g., *EDA-only*: `env-setup` $\rightarrow$ `eda` $\rightarrow$ `critic`; *Full Pipeline*: `env-setup` $\rightarrow$ `eda` $\rightarrow$ `data-cleaning` $\rightarrow$ `model-training` $\rightarrow$ `inference` $\rightarrow$ `critic`) and update `[ ]` $\rightarrow$ `[/]` $\rightarrow$ `[x]` as phases complete.
+Write the tailored phase checklist to `task.md` (e.g., *Full Pipeline*: `env-setup` $\rightarrow$ `eda` $\rightarrow$ `data-cleaning` $\rightarrow$ `model-training` $\rightarrow$ `inference` $\rightarrow$ `critic`) and update `[ ]` $\rightarrow$ `[/]` $\rightarrow$ `[x]` as phases complete.
 
 ### 2. Colab Connection, Iterative Subagent Execution & Error Recovery
 Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) when connecting to Colab or handling errors. For each required phase in `task.md`:
 1. **Line-Range Library Lookup (Optional Advisory Tips)**:
    - Never read all of [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md). Read only its **Section-to-Line Index Map** (lines 35–68), then call `view_file` with `StartLine` and `EndLine` for the relevant domain section.
    - Inject **at most 5 advisory library tips** (name + `pip` package only), filtered by `Engine Compatibility` (`polars` / `pandas` / `both`). Priority hierarchy: **User preference > Colab Runtime constraints > Orchestrator suggestions**.
-2. **Invoke Subagent & Parse Separated Output Contract**:
-   - Pass the artifact directory path, active `workflow_mode` (`quick` default vs. `polished`), task modality (`tabular`, `nlp_llm`, `cv`, `time_series`, `rl`, `unsupervised`), `dataframe_engine`, and live stdout/schema from the preceding phase.
-   - For `inference-agent`: automatically use models trained earlier in the notebook; if none exist (or choice is ambiguous), ask the user (`ask_question`) **before** invoking `inference-agent`.
+2. **Two-Step Environment Setup Loop (`env-setup-agent`)**:
+   - **Step 1 (Probe)**: Invoke `env-setup-agent` to receive its initial probe cell (`STEP: "PROBE"`). Execute this cell in Colab and send its stdout (Python version, GPU status, `pip list` grep for core libraries) back via `send_message`.
+   - **Step 2 (Plan & Validation)**: Receive the final structured payload. If `INCOMPATIBLE` is reported (e.g. Python version mismatch or conda-only packages), halt and report to the user. If `HARDWARE_MISMATCH` is reported (e.g., `wants GPU, found CPU`), prompt the user via `ask_question` to switch Colab runtime (*Runtime* $\rightarrow$ *Change runtime type*) before continuing.
+   - **Restart & Resume Protocol**: If `REQUIRES_RESTART: true`, place the install cell first in the notebook (`index: 0`) and run it. Immediately restart the Colab runtime (via `open_colab_browser_connection` / runtime restart), warn the user that variables are reset, and run only the subsequent verification/smoke-test cell before proceeding.
+3. **Execute Downstream Subagents & Error Feedback (`send_message`)**:
    - Each subagent writes its plan/rationale/invariants to `<subagent_name>_tasks.md` and returns executable cells separately in a structured `CELLS_TO_EXECUTE` block.
-3. **Execute Cells & Loop Back on Errors/Surprises (`send_message`)**:
-   - Add (`add_text_cell`, `add_code_cell`) and run (`run_code_cell`) each cell in Colab, recording `cellId` and step output file paths.
-   - If a cell fails, hits OOM, requires a C-extension kernel restart, or reveals a surprising schema, follow [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) and send the live traceback/stdout back to the subagent via `send_message` (up to 2 retries) for a patched cell before asking the user.
+   - For downstream subagents (`eda-agent`, `data-cleaning-agent`, `model-training-agent`, `inference-agent`), add and run cells sequentially via `colab-mcp`, recording `cellId` and output files.
+   - For `inference-agent`: reuse models trained earlier in the notebook; if none exist or selection is ambiguous, prompt user via `ask_question` **before** invoking `inference-agent`.
+   - If a cell fails, hits OOM, or returns an unexpected schema, send the live traceback/stdout back to the active subagent via `send_message` (up to 2 retries) for a patched cell before asking the user.
 
 ### 3. Scoped End-of-Notebook Critic Gate (`critic-agent`)
 - Once all planned phases finish executing, invoke `critic-agent` with the current notebook cell list, execution outputs, active `workflow_mode`, task modality, and paths to all `<subagent_name>_tasks.md` files.
