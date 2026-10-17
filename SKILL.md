@@ -56,15 +56,19 @@ Define (`define_subagent` with `enable_mcp_tools: false`, `enable_write_tools: t
    - Valid `colab-mcp` tools: `get_cells`, `add_text_cell`, `add_code_cell`, `update_cell`, `run_code_cell`, `delete_cell`, `move_cell` (never `get_cell`, `edit_cell`, `run_cell`).
    - If `colab-mcp` is missing from `~/.gemini/config/mcp_config.json`, configure `"command": "uvx"` (or the path to `uvx` on Windows/macOS/Linux) and `"args": ["git+https://github.com/googlecolab/colab-mcp"]`.
 
-3. **Orchestrate Specialist Subagents, Track `<subagent_name>_tasks.md`, & Execute Cells Sequentially**:
+3. **Orchestrate Specialist Subagents, Inject Domain Library Tips, Track `<subagent_name>_tasks.md`, & Execute Cells Sequentially**:
    - For each required phase in `task.md`:
-     1. Read the subagent's spec file in `agents/support/<name>.md` or `agents/notebook/<name>.md`, call `define_subagent` (if not yet defined in the session), and call `invoke_subagent` passing the task/artifact directory path (where the subagent MUST write `<subagent_name>_tasks.md`), the chosen `dataframe_engine` (`polars`, `pandas`, `duckdb`, `pyspark`), and live context/outputs from the preceding phase.
-     2. **Mandatory User Prompt for Checkpoint Offloading / Compression**:
+     1. Read the subagent's spec file in `agents/support/<name>.md` or `agents/notebook/<name>.md`, call `define_subagent` (if not yet defined in the session), and call `invoke_subagent`.
+     2. **Domain-Specific Library Injection & Best Practice Suggestions**:
+        - Consult [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md) to detect matching domains based on the user's task (e.g. *Bioinformatics / Genomics*, *Reinforcement Learning*, *NLP & LLMs*, *OpenAI API*, *Multi-Agent Systems*, *Computer Vision*, *Time Series Forecasting*, *XAI / Interpretability*).
+        - In the prompt to the subagent (e.g., to `env-setup-agent`, `eda-agent`, or `model-training-agent`), the Main Orchestrator should inject targeted library recommendations and best practices from [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md) (e.g. suggesting `Biopython`/`Scanpy` for genomic data; `Gymnasium`/`Stable-Baselines3` for RL; `tiktoken`/`openai` for OpenAI API workflows; `LangGraph`/`LlamaIndex`/`CrewAI` for agent systems; `Optuna`/`W&B` for sweeps; `SHAP` for explainability).
+        - Pass the task/artifact directory path (where the subagent MUST write `<subagent_name>_tasks.md`), the chosen `dataframe_engine` (`polars`, `pandas`, `duckdb`, `pyspark`), and live context/outputs from the preceding phase.
+     3. **Mandatory User Prompt for Checkpoint Offloading / Compression**:
         - If `data-cleaning-agent` returns `OFFLOAD_PROMPT_NEEDED` (due to large or numerous checkpoints), **always ask the user first (`ask_question`)** whether they want checkpoints zipped or uploaded asynchronously to Google Drive before initiating the operation.
-     3. **Special Rule for `inference-agent`**:
+     4. **Special Rule for `inference-agent`**:
         - If a model was trained earlier in the notebook by `model-training-agent`, instruct `inference-agent` to automatically use that trained model variable/checkpoint.
         - If no model was trained in the notebook (or multiple models exist and the user did not specify which one), the **Orchestrator must ask the user first** (`ask_question`) before spawning `inference-agent`, and then prompt `inference-agent` with **what exact model to use + where to get it**.
-     4. Inspect the subagent's generated `<subagent_name>_tasks.md` file to review its granular sub-tasks, rationale, and invariants, then execute the paired Markdown (`add_text_cell`) and Code (`add_code_cell` + `run_code_cell`) cells in Colab, recording each `cellId` and step output path.
+     5. Inspect the subagent's generated `<subagent_name>_tasks.md` file to review its granular sub-tasks, rationale, and invariants, then execute the paired Markdown (`add_text_cell`) and Code (`add_code_cell` + `run_code_cell`) cells in Colab, recording each `cellId` and step output path.
 
 4. **Run End-of-Notebook Critic Gate (`critic-agent`) with Full `<subagent_name>_tasks.md` Insight**:
    - Once all specialist phases have executed in Colab, spawn `critic-agent` with the full notebook cells, execution outputs, and paths to all `<subagent_name>_tasks.md` files (`dataset-discovery-agent_tasks.md`, `env-setup-agent_tasks.md`, `eda-agent_tasks.md`, `data-cleaning-agent_tasks.md`, `model-training-agent_tasks.md`, `inference-agent_tasks.md`).
