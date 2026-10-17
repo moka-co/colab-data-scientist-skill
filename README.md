@@ -16,6 +16,7 @@ A complete data science and machine learning workflow methodology for your codin
   - [Google Drive Sync](#2-google-drive-sync-gdrive)
 - [When Something Goes Wrong](#when-something-goes-wrong)
 - [Philosophy](#philosophy)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ## How it works
@@ -132,6 +133,11 @@ Can be run completely standalone (without any notebook) to explore a domain, or 
 
 - **[`scripts/export_to_ipynb.py`](file:///scripts/export_to_ipynb.py)**: Assembles a standard Jupyter/Colab `nbformat` v4 notebook by combining cell structures from `get_cells(includeOutputs=False)` with step output JSON files, avoiding WebSocket payload limits.
 
+### References & Guides
+
+- **[`best-practices/notebook-best-practices.md`](file:///best-practices/notebook-best-practices.md)**: Engineering guidelines for Google Colab notebooks (Markdown-before-code narrative, cell granularity, modular function extraction, `%%time` profiling, `Pathlib`, rich `printmd()` logging, reliable `!{sys.executable} -m pip install`, IPython `%debug` / `set_trace` checkpoints, seeds, early assertion checks, GPU memory management, and resumable Drive checkpointing).
+- **[`best-practices/pandas-best-practices.md`](file:///best-practices/pandas-best-practices.md)**: Reference guide with core pandas best practices (explicit schema contracts, avoiding chained indexing / `inplace=True` / `iterrows()`, vectorized operations, category dtypes, missing data handling, named `groupby` aggregations, explicit merge parameters, and profiling) linked to official [Pandas Documentation](https://pandas.pydata.org/docs/).
+
 ## Tooling & Configuration
 
 ### 1. Google Colab MCP (`colab-mcp`)
@@ -172,6 +178,10 @@ For automatic synchronization into Google Drive:
 - **Strict Orchestrator Control**: Only one agent mutates live notebook state. Preventing subagents from directly invoking MCP tools eliminates race conditions.
 - **Leak-Free by Default**: Preprocessing decisions must be fit strictly on training data.
 - **Zero-Loss Output Persistence**: Plots, metrics, and data summaries should never vanish when exporting from Colab MCP to disk or Drive.
+
+## Acknowledgements
+
+Special thanks to [**Superpowers**](https://github.com/obra/superpowers) by [@obra](https://github.com/obra) for pioneering composable agentic skills, subagent-driven workflows, and disciplined development methodology that served as the key inspiration for this project's architecture and design.
 
 ## License
 
