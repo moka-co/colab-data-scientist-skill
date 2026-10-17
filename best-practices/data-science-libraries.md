@@ -38,33 +38,33 @@ The Main Orchestrator MUST use this map to inspect specific line ranges with `vi
 | Part | Section # | Domain Name | Out-of-Pipeline? | Line Range |
 |---|---|---|---|---|
 | **Part I** | §1 | Dataframe Engines & Structured Data | No | L73-L89 |
-| | §2 | EDA & Automated Profiling | No | L91-L101 |
-| | §3 | Data Visualization & Dashboards | No | L103-L118 |
-| | §4 | Data Validation & Orchestration | No | L120-L130 |
-| | §5 | Synthetic Data Generation | No | L132-L142 |
-| **Part II** | §6 | Classical Machine Learning & AutoML | No | L144-L163 |
-| | §7 | Statistical Modeling & Bayesian Inference | No | L165-L178 |
-| | §8 | Optimization, SAT, SMT & Planning | **Yes [Out-of-Pipeline]** | L180-L196 |
-| | §9 | Scientific Computing & Symbolic Math | No | L198-L210 |
-| | §10 | Graph Analytics & Graph Neural Networks | No | L212-L223 |
-| **Part III**| §11 | Time Series Forecasting & Anomaly | No | L225-L245 |
-| | §12 | Causal Inference & Uplift Modeling | No | L247-L257 |
-| | §13 | Survival Analysis & Event History | No | L259-L268 |
-| | §14 | Recommender Systems | No | L270-L280 |
-| | §15 | Geospatial Analytics & Mapping | No | L282-L293 |
-| | §16 | Bioinformatics & Genomics | No | L295-L307 |
-| | §17 | Simulation & Physics Engines | **Yes [Out-of-Pipeline]** | L309-L323 |
-| **Part IV** | §18 | Deep Learning & LLM Fine-Tuning | No | L325-L343 |
-| | §19 | Reinforcement Learning & Simulation | No | L345-L361 |
-| | §20 | NLP, Embeddings, RAG & Vector DBs | No | L363-L419 |
-| | §21 | Foundation Model SDKs & Multi-Provider | No | L421-L432 |
-| | §22 | AI Agents & Multi-Agent Frameworks | No | L434-L450 |
-| | §23 | Computer Vision & Generative Media | No | L452-L472 |
-| | §24 | Audio, Speech & Video Processing | No | L474-L492 |
-| **Part V**  | §25 | XAI, Fairness & Data Drift Monitoring | No | L494-L509 |
-| | §26 | Hyperparameter Tuning & Tracking | No | L511-L526 |
-| | §27 | Federated Learning & Privacy | **Yes [Out-of-Pipeline]** | L528-L539 |
-| | §28 | Model Serving, Interactive UIs & APIs | **Yes [Out-of-Pipeline]** | L541-L549 |
+| | §2 | EDA & Automated Profiling | No | L91-L102 |
+| | §3 | Data Visualization & Dashboards | No | L104-L119 |
+| | §4 | Data Validation & Orchestration | No | L121-L131 |
+| | §5 | Synthetic Data Generation | No | L133-L143 |
+| **Part II** | §6 | Classical Machine Learning & AutoML | No | L145-L164 |
+| | §7 | Statistical Modeling & Bayesian Inference | No | L166-L179 |
+| | §8 | Optimization, SAT, SMT & Planning | **Yes [Out-of-Pipeline]** | L181-L197 |
+| | §9 | Scientific Computing & Symbolic Math | No | L199-L211 |
+| | §10 | Graph Analytics & Graph Neural Networks | No | L213-L224 |
+| **Part III**| §11 | Time Series Forecasting & Anomaly | No | L226-L246 |
+| | §12 | Causal Inference & Uplift Modeling | No | L248-L258 |
+| | §13 | Survival Analysis & Event History | No | L260-L269 |
+| | §14 | Recommender Systems | No | L271-L281 |
+| | §15 | Geospatial Analytics & Mapping | No | L283-L294 |
+| | §16 | Bioinformatics & Genomics | No | L296-L308 |
+| | §17 | Simulation & Physics Engines | **Yes [Out-of-Pipeline]** | L310-L324 |
+| **Part IV** | §18 | Deep Learning & LLM Fine-Tuning | No | L326-L344 |
+| | §19 | Reinforcement Learning & Simulation | No | L346-L362 |
+| | §20 | NLP, Embeddings, RAG & Vector DBs | No | L364-L420 |
+| | §21 | Foundation Model SDKs & Multi-Provider | No | L422-L433 |
+| | §22 | AI Agents & Multi-Agent Frameworks | No | L434-L451 |
+| | §23 | Computer Vision & Generative Media | No | L453-L473 |
+| | §24 | Audio, Speech & Video Processing | No | L475-L493 |
+| **Part V**  | §25 | XAI, Fairness & Data Drift Monitoring | No | L495-L510 |
+| | §26 | Hyperparameter Tuning & Tracking | No | L512-L527 |
+| | §27 | Federated Learning & Privacy | **Yes [Out-of-Pipeline]** | L529-L540 |
+| | §28 | Model Serving, Interactive UIs & APIs | **Yes [Out-of-Pipeline]** | L542-L550 |
 
 ---
 
