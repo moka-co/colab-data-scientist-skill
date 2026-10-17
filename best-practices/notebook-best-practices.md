@@ -1,155 +1,139 @@
 # Notebook Best Practices Guide
 
-This reference guide establishes core engineering and workflow standards for building, executing, and maintaining clean, reproducible, and fault-tolerant notebooks in **Google Colab**.
+This reference guide establishes engineering and workflow standards for building, executing, and maintaining clean, reproducible, and fault-tolerant notebooks in **Google Colab**.
 
-All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-cleaning-agent`, `model-training-agent`, `inference-agent`, `critic-agent`) must reference and adhere to these guidelines.
+All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-cleaning-agent`, `model-training-agent`, `inference-agent`, `critic-agent`) must adhere to the **Universal Standards** below and adjust ceremony based on the active **Workflow Mode**.
+
+---
+
+## 0. Workflow Modes: `Quick Exploration` (Default) vs. `Polished Deliverable`
+
+### Universal Standards (Mandatory in Both Modes)
+- **Global Reproducibility Seeds**: Set `random`, `numpy`, and `torch` seeds at the top of the notebook.
+- **Zero Data Leakage**: Fit all scalers, imputers, tokenizers, and encoders strictly on training data after splitting.
+- **Secret Hygiene**: Never hardcode API keys or tokens; always load credentials via `from google.colab import userdata` or `os.environ`.
+- **Plot Quality**: Every chart must have an explicit title, labeled axes (with units where applicable), and readable legends.
+- **Reliable Package Installation**: Use `!{sys.executable} -m pip install -q ...` in a consolidated setup cell so packages install into the active kernel.
+
+### Mode-Specific Ceremony
+| Practice | `Quick Exploration` Mode (Default) | `Polished Deliverable` Mode |
+| :--- | :--- | :--- |
+| **Markdown Narrative** | Major section headers (`## Section`) only; concise inline comments for individual cells | Precede every code cell with a Markdown cell explaining the *why* and hypothesis |
+| **Preprocessing Architecture** | Clean inline functions directly inside notebook cells | Extract transformations into modular `scripts/clean_XX_<name>.py` scripts, write intermediate checkpoints (`data/intermediate/`), and log to `DATA_CLEANING_LOG.md` |
+| **Runtime Profiling & Styling** | Use `%%time` and `tqdm` only on genuinely slow cells (`> 5s`); standard `print()` or DataFrame display | Use `%%time` on all non-trivial cells, `tqdm` on loops, and `printmd()` for rich styled metric alerts |
 
 ---
 
 ## 1. Structure & Narrative Flow
-- **Markdown Before Code**: Always precede every code cell with a Markdown title/description cell explaining what the step intends to achieve and *why*—only then add the code cell.
-- **Hierarchical Markdown Headers**: Use structured Markdown headers (`#`, `##`, `###`) to ensure the notebook is automatically navigable via the Colab table of contents.
-- **Explain the "Why", Not Just the "What"**: Use Markdown to explain hypotheses, rationale, and interpretation of findings, rather than merely restating code mechanics in comments.
+- **Hierarchical Markdown Headers**: Use structured Markdown headers (`#`, `##`, `###`) so the notebook is navigable via the Colab table of contents.
+- **Explain the "Why", Not Just the "What"**: Use Markdown headers (or preceding cells in `Polished Deliverable` mode) to explain hypotheses, rationale, and interpretation of findings rather than restating code mechanics.
 - **Conclusions & Next Steps**: End the notebook with a summary cell highlighting final results, metrics, caveats/limitations, and suggested next steps.
 
 ---
 
 ## 2. Cell Granularity, Modularity & Functions
 - **Small, Focused Cells**: Keep cells small and dedicated to a single logical step. One clear responsibility per cell makes re-running, debugging, and tracing state changes straightforward.
-- **Extract Logic into Functions & `.py` Modules**:
-  - Frequently rewrite cell logic into reusable, tested functions.
-  - Move these functions at regular intervals into separate Python scripts (`scripts/clean_*.py`, `scripts/model_utils.py`, etc.) to keep notebook cells concise and import-driven.
+- **Reusable Functions & Modular Scripts**:
+  - Encapsulate repeated transformations into clean, reusable functions.
+  - In **`Polished Deliverable` mode**, move reusable functions into separate Python scripts (`scripts/clean_*.py`, `scripts/model_utils.py`) so notebook cells remain concise and import-driven.
 - **Runtime Profiling with `%%time`**:
-  - If a particular cell takes non-trivial time to run (e.g. data ingestion, heavy transformations, model fitting), add the `%%time` cell magic at the very top as both a runtime logger and a visual indicator.
-- **Path Handling with `Pathlib`**:
-  - Avoid `os.path`. Use `pathlib.Path` across all file manipulations for readable, platform-independent path operations.
-- **Avoid Hardcoded Absolute Paths**:
-  - Use relative paths or anchor paths from a single `BASE_DIR = Path(...)` configured at the top of the notebook.
+  - On cells taking non-trivial time to run (`> 5s`, such as data ingestion, heavy transformations, or model fitting), place `%%time` at line 1 of the cell.
+- **Path Handling with `pathlib.Path`**:
+  - Prefer `pathlib.Path` over `os.path` and anchor paths from a single `BASE_DIR = Path(".")` configured at the top of the notebook.
 
 ---
 
-## 3. Rich Markdown Output & Visual Logging
-- **Markdown Printing for Rich Output**:
-  - Include rich Markdown formatting in code cell outputs to highlight key parameters, metrics, performance alerts, and warnings with colors and bold styling.
-  - Recommended utility:
-    ```python
-    from IPython.display import Markdown, display
+## 3. Visual Logging & Output Formatting
+- **Rich Markdown Output (`Polished Deliverable` mode or key summaries)**:
+  ```python
+  from IPython.display import Markdown, display
 
-    def printmd(string, color=None):
-        colorstr = f"<span style='color:{color}'>{string}</span>" if color else string
-        display(Markdown(colorstr))
-
-    # Example:
-    printmd("**Training complete — Final Val Loss: 0.142**", color="green")
-    ```
+  def printmd(string, color=None):
+      colorstr = f"<span style='color:{color}'>{string}</span>" if color else string
+      display(Markdown(colorstr))
+  ```
 - **Visual Progress with `tqdm`**:
-  - Always wrap long loops, downloads, or batch iterations with `tqdm.auto.tqdm` to display live visual progress bars.
+  - Wrap long-running loops, downloads, or batch iterations with `tqdm.auto.tqdm`.
 - **Plot Quality & Labeling**:
-  - Every chart must have explicit titles, axis labels with units, clear legends, and readable font sizes.
+  - Every chart must have explicit titles, axis labels with units, clear legends, and `plt.tight_layout()` / `plt.show()`.
 
 ---
 
-## 4. Kernel, Environment & Package Management
-- **Kernel vs. Shell Environments**:
-  - Remember: running Jupyter from an environment does **NOT** mean that shell execution via `!` shares the exact same environment variables.
+## 4. Kernel, Environment, Secrets & Provenance
 - **Reliable Package Installation**:
-  - If `!pip install foo` fails to install cleanly into the active kernel, use:
-    ```bash
-    !{sys.executable} -m pip install -q foo
+  - Always target the active kernel's Python interpreter because `!pip` in a subshell can mismatch the kernel environment:
+    ```python
+    !{sys.executable} -m pip install -q package_name
     ```
-    (`sys.executable` guarantees targeting the Python interpreter running the current kernel).
-- **Consolidated Setup Cell**:
-  - Consolidate all installation commands in a single setup cell at the top of the notebook, because Colab virtual machines reset on session disconnection.
-- **Pin Dependencies & Record Versions**:
-  - Pin package versions (`!pip install package==x.y.z`) or install from a verified `requirements.txt`.
-  - Log Python version and installed package versions with `!pip freeze` or explicit version prints for core libraries.
-- **Format & Lint with Ruff**:
-  - Enforce clean Python formatting and linting using `ruff` (`!ruff check .` / `!ruff format .`).
-- **Secret Management**:
-  - Never commit API keys, tokens, or credentials in plain text. Use Colab Secrets (`from google.colab import userdata; key = userdata.get('KEY')`) or environment variables.
+- **Consolidated Setup Cell & Version Provenance**:
+  - Consolidate all installs at the top of the notebook because Colab VMs reset on disconnection.
+  - Log `sys.version` and `__version__` for core libraries (`numpy`, `pandas`/`polars`, `sklearn`, `torch`, etc.) immediately after imports.
+- **Secret Management (`google.colab.userdata`)**:
+  - Never hardcode credentials in cells. Retrieve keys via Colab Secrets with an environment fallback:
+    ```python
+    from google.colab import userdata
+    import os
+
+    token = userdata.get("HF_TOKEN") or os.environ.get("HF_TOKEN")
+    ```
 
 ---
 
 ## 5. Debugging & Error Handling
 - **IPython Debugger (`%debug`)**:
-  - When a cell encounters an uncaught exception, suggest the user run `%debug` in a new cell to launch the interactive IPython debugger at the point of failure ([IPython Debugger Documentation](http://ipython.readthedocs.io/en/stable/interactive/magics.html#magic-debug)).
-- **Programmatic Debugger Checkpoints (`set_trace`)**:
-  - For step-by-step debugging inside functions or training loops, insert:
-    ```python
-    from IPython.core.debugger import set_trace
-    set_trace()
-    ```
-    This provides an interactive breakpoint directly within the notebook, similar to `pdb` in an IDE.
+  - When investigating an uncaught exception interactively, `%debug` in a scratch cell opens post-mortem inspection.
+- **Programmatic Breakpoints (`set_trace`)**:
+  - Use `from IPython.core.debugger import set_trace; set_trace()` only during interactive human debugging—never leave active `set_trace()` calls in automated cells executed via `colab-mcp` because `stdin` blocks indefinitely.
 
 ---
 
-## 6. Reproducibility & Early Validation
-- **Seed Setting**: Set random seeds across all libraries at the top of the notebook:
+## 6. Reproducibility, Data Provenance & Early Validation
+- **Seed Setting**: Set random seeds across all active libraries at the top of the notebook:
   ```python
-  import random, os, numpy as np, torch
-  seed = 42
-  random.seed(seed)
-  os.environ["PYTHONHASHSEED"] = str(seed)
-  np.random.seed(seed)
-  if torch.cuda.is_available():
-      torch.manual_seed(seed)
-      torch.cuda.manual_seed_all(seed)
+  import os, random, numpy as np
+
+  SEED = 42
+  random.seed(SEED)
+  os.environ["PYTHONHASHSEED"] = str(SEED)
+  np.random.seed(SEED)
+  try:
+      import torch
+      torch.manual_seed(SEED)
+      if torch.cuda.is_available():
+          torch.cuda.manual_seed_all(SEED)
+  except ImportError:
+      pass
   ```
-- **Early Sanity Checks & Contract Validation**:
-  - Validate data assumptions immediately after loading.
-  - Add quick assertion checks (e.g. `assert len(df) > 0`, shape checks, dtypes verification, and zero unexpected NaNs).
+- **Data Provenance & Sanity Checks**:
+  - Log the dataset source URL/identifier, file byte size, row/column count, and a quick SHA256 hash or sample fingerprint right after loading.
+  - Assert basic invariants immediately (`assert len(df) > 0`, expected columns, target distribution).
 - **Sample-First Development**:
-  - Develop and test pipelines on a small representative sample first (e.g. `df.sample(1000, random_state=42)`), then run against the full dataset once logic is verified.
+  - Test complex pipelines on a small representative subset or 1–2 mini-batches before running full multi-epoch training.
 
 ---
 
-## 7. Compute, Memory & Session Management
+## 7. Compute, Memory & Session Persistence
 - **Deliberate Hardware Runtime**:
-  - Choose the hardware accelerator deliberately (*Runtime* $\rightarrow$ *Change runtime type*). Switch back to CPU for tabular/lightweight tasks when a GPU is unnecessary.
-  - Verify GPU status with `!nvidia-smi` and PyTorch checks.
+  - Verify GPU availability via `!nvidia-smi` and `torch.cuda.is_available()` when deep learning or GPU libraries (`cuDF`, `xgboost` GPU) are used.
 - **Explicit Memory Reclamation**:
-  - Proactively free large memory objects when done:
-    ```python
-    import gc
-    del large_intermediate_df
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    ```
-- **Disk Caching for Expensive Operations**:
-  - Cache heavy computations or intermediate datasets to disk (e.g. Parquet for dataframes, `.npy` for matrices, `.pt` for tensors) rather than re-computing.
+  - Free large intermediate objects when no longer needed (`del temp_df; gc.collect(); torch.cuda.empty_cache()`).
+- **Persistence & Checkpointing**:
+  - When training takes `> 2 minutes` or `Polished Deliverable` mode is active, save intermediate data and model checkpoints to disk (and sync to Google Drive if the user granted session Drive consent).
 
 ---
 
-## 8. Persistence & Resumability (Colab VM Ephemerality)
-- **Mount Google Drive for Persistent Storage**:
-  - Because Colab VM disk storage is wiped when a session terminates, mount Google Drive for all persistent assets:
-    ```python
-    from google.colab import drive
-    drive.mount('/content/drive')
-    ```
-- **Regular Checkpointing**:
-  - Save checkpoints, intermediate data, and model weights regularly to Google Drive.
-- **Session Limits & Resumable Pipelines**:
-  - Never depend on uninterrupted long-running sessions (free tiers have idle timeouts and max duration caps).
-  - Ensure training loops and data processing pipelines can cleanly resume from the latest saved checkpoint on Drive.
+## 8. Subagent Review Checklist
 
----
+### Universal Checks (Both Modes)
+- [ ] Setup cell uses `!{sys.executable} -m pip install` and logs core library versions.
+- [ ] Global random seeds (`SEED = 42`) are set at the top of the notebook.
+- [ ] Secrets use `google.colab.userdata` or environment variables—zero plaintext keys.
+- [ ] Data provenance (source, size, shape) and early sanity assertions are logged on load.
+- [ ] Zero data leakage: preprocessing transformers are fit strictly on training splits.
+- [ ] Task-appropriate baseline model, evaluation metrics, and labeled visualizations are present.
+- [ ] Notebook concludes with a summary of results, limitations, and next steps.
 
-## 9. Subagent Review Checklist
-
-When writing or reviewing notebook cells, verify:
+### Additional Checks for `Polished Deliverable` Mode
 - [ ] Every code cell is preceded by a Markdown cell explaining intent and rationale.
-- [ ] Markdown headers build a clear, hierarchical table of contents.
-- [ ] Cells are small and focused on a single logical responsibility.
-- [ ] Heavy logic is encapsulated in functions and modular `.py` files.
-- [ ] Long-running cells have `%%time` and loops use `tqdm`.
-- [ ] Paths use `pathlib.Path` from a relative or `BASE_DIR` root.
-- [ ] Key parameters and metrics are highlighted using `printmd()`.
-- [ ] Setup cell consolidates pinned `pip` installs via `!{sys.executable} -m pip install`.
-- [ ] Seeds are set at the top for reproducibility.
-- [ ] Early sanity assertions validate shapes, dtypes, and null counts.
-- [ ] Memory is managed via `del`, `gc.collect()`, and `torch.cuda.empty_cache()`.
-- [ ] Drive is mounted for persistence, and training is checkpointed/resumable.
-- [ ] No hardcoded secrets; credentials use environment variables or Colab Secrets.
-- [ ] Notebook finishes with a conclusions, caveats, and next steps summary.
+- [ ] Preprocessing steps are modularized in `scripts/clean_XX_<name>.py` with intermediate checkpoints and `DATA_CLEANING_LOG.md`.
+- [ ] Key outputs use `printmd()` and non-trivial cells include `%%time`.
