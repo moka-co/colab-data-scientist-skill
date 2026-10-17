@@ -20,11 +20,20 @@ You MUST adhere to [`best-practices/notebook-best-practices.md`](file:///best-pr
      - **Granular Sub-Tasks (`[ ]` $\rightarrow$ `[x]`)**: Model architectures selected, hyperparameter choices, training loop/fit steps, evaluation metrics planned, and both diagnostic & data-space visualizations designed.
      - **Modeling Rationale & Insights for Critic/Orchestrator**: Why specific models/losses/metrics were chosen, expected convergence/performance checks, and exact variable/checkpoint names produced for `inference-agent` and `critic-agent`.
 
-1. **Dedicated Model Training Cell(s) (Separate from Preprocessing & Evaluation)**:
-   - Always create dedicated Markdown + Code cell(s) specifically for model initialization, hyperparameter configuration, and training (`.fit()` for classical ML or explicit training/validation loops with loss/epoch logging and checkpoint saving for deep learning).
-   - Store trained model object(s) in clearly named notebook variables (e.g., `trained_model` or `trained_models = {...}`) and optionally save weights/checkpoints to disk so `inference-agent` can automatically consume them.
+1. **Mandatory Baseline Model (Always First)**:
+   - You MUST always start model training by establishing a **baseline model** that represents the most common or simplest model/architecture for that specific problem type:
+     - *Tabular Classification*: Dummy/majority-class classifier $\rightarrow$ Logistic Regression or a simple Decision Tree.
+     - *Tabular Regression*: Mean/median dummy regressor $\rightarrow$ Ordinary Least Squares (OLS) / Ridge regression.
+     - *Time Series*: Naive persistent baseline ($y_t = y_{t-1}$) or simple moving average / Exponential Smoothing / ARIMA.
+     - *NLP / Text*: TF-IDF with Logistic Regression or Naive Bayes (or a lightweight DistilBERT if deep learning is requested).
+     - *Computer Vision*: Simple linear/logistic baseline or lightweight CNN (e.g. MobileNet / simple ResNet).
+   - Evaluate and log the baseline's performance metrics first. Only after the baseline is established should you train more complex architectures (e.g. XGBoost, LightGBM, neural networks) to measure whether complexity actually yields meaningful empirical lift.
 
-2. **Task-Adaptive Evaluation & Error Analysis Cell(s)**:
+2. **Dedicated Model Training Cell(s) (Separate from Preprocessing & Evaluation)**:
+   - Always create dedicated Markdown + Code cell(s) specifically for model initialization, hyperparameter configuration, and training (`.fit()` for classical ML or explicit training/validation loops with loss/epoch logging and checkpoint saving for deep learning).
+   - Store trained model object(s) in clearly named notebook variables (e.g., `baseline_model`, `trained_model` or `trained_models = {...}`) and optionally save weights/checkpoints to disk so `inference-agent` can automatically consume them.
+
+3. **Task-Adaptive Evaluation & Error Analysis Cell(s)**:
    - Compute comprehensive metrics tailored to the problem domain:
      - *Classification*: Accuracy, Cross-Validation Accuracy, Precision, Recall, Specificity, F1, ROC-AUC, PR-AUC, plus error metrics (Misclassification Rate, FP/FN counts, Log Loss, Brier Score/MSE, RMSE, MAE).
      - *Regression*: $R^2$, Adjusted $R^2$, MAE, MSE, RMSE, MAPE, and residual quantiles.
