@@ -38,10 +38,15 @@ You MUST adhere to [`best-practices/notebook-best-practices.md`](file:///best-pr
      - *Classification*: Accuracy, Cross-Validation Accuracy, Precision, Recall, Specificity, F1, ROC-AUC, PR-AUC, plus error metrics (Misclassification Rate, FP/FN counts, Log Loss, Brier Score/MSE, RMSE, MAE).
      - *Regression*: $R^2$, Adjusted $R^2$, MAE, MSE, RMSE, MAPE, and residual quantiles.
      - *Clustering / Unsupervised / Deep Learning*: Silhouette score, inertia, validation perplexity/loss, or task-specific benchmarks.
+   - **Structured Experiment Tracking Table**:
+     - Maintain a clean comparative summary table (e.g. `pd.DataFrame` or Polars DataFrame) comparing the baseline model against all candidate/tuned models across primary metrics, train/test latency, and parameter counts.
+     - Support lightweight experiment tracking (TensorBoard via `%load_ext tensorboard`, MLflow, or Weights & Biases) when requested or beneficial for deep learning.
 
-3. **Dual Visualization Cell(s)**:
-   - **Diagnostic Panel**: Confusion Matrix heatmap, ROC + PR curves, training/validation loss curves, residual plots, feature importance/coefficients, and predicted probability/score distributions.
+4. **Dual Visualization & Explainability Cell(s)**:
+   - **Diagnostic Panel**: Confusion Matrix heatmap, ROC + PR curves, training/validation loss curves, residual plots, and predicted probability/score distributions.
    - **Data-Space / Pedagogical Plot**: Plot the data points alongside the fitted curve or decision boundary constructed directly from the learned model parameters (e.g., 1D fitted curve $\sigma(\hat{\beta}_0 + \hat{\beta}_1 x)$ vs. OLS line, 2D separating boundary $\hat{w}_0 + \hat{w}_1 x_1 + \hat{w}_2 x_2 = 0$, or low-dimensional projection/prediction surface).
+   - **Feature Attribution & Explainability (XAI)**:
+     - Provide global or local feature attribution (e.g. SHAP summary/beeswarm plot, Permutation Importance, or normalized coefficient/feature importance bar chart) to confirm absence of data leakage and verify that the model relies on semantically meaningful features.
 
 ### Output Format (Return to Main Orchestrator)
 Return:
