@@ -1,6 +1,6 @@
 # Colab Data Scientist Skill
 
-A complete data science and machine learning workflow methodology for coding agents in Google Colab, built on specialized subagents, interactive browser runtime execution with iterative error feedback, task-adaptive modeling across modalities, and consent-driven Google Drive synchronization.
+A complete data science and machine learning workflow methodology for coding agents in Google Colab, built on specialized subagents, interactive browser runtime execution with iterative error feedback, task-adaptive modeling across modalities, multi-gate quality auditing, and consent-driven Google Drive synchronization.
 
 ## Table of Contents
 
@@ -24,11 +24,17 @@ A complete data science and machine learning workflow methodology for coding age
 
 When you ask your agent to discover datasets or build, run, or debug a notebook in Google Colab, the **Main Orchestrator** sets up a structured workflow tailored to your task:
 
-1. **Upfront Alignment (`ask_question`)**: The Orchestrator confirms your **Workflow Mode** (**`Quick Exploration`** by default for fast, low-ceremony inline code, or **`Polished Deliverable`** for full Markdown narratives, modular `scripts/clean_*.py` scripts, and intermediate checkpoints), your preferred dataframe engine (**Pandas**, **Polars**, **DuckDB**, or **PySpark**), and asks **once per session** whether to enable Google Drive synchronization.
+1. **Upfront Alignment (`ask_question`)**: The Orchestrator confirms your **Workflow Mode** (**`Quick Exploration`** by default for fast, low-ceremony inline code, or **`Polished Deliverable`** for full Markdown narratives, modular `scripts/clean_*.py` scripts, and intermediate checkpoints), your preferred dataframe engine (**Pandas**, **Polars**, **DuckDB**, or **PySpark**), training time quota, and asks **once per session** whether to enable Google Drive synchronization.
 2. **Existing Notebook Inventory**: If attaching to an existing notebook, the Orchestrator inspects existing cells via `get_cells(includeOutputs=False)`, summarizes what already exists, and skips completed phases.
-3. **Sequential Specialist Dispatch & Iterative Feedback**: Subagents write their plan and invariants to `<subagent_name>_tasks.md` and return a structured `CELLS_TO_EXECUTE` JSON array. The Orchestrator inserts and executes cells via `colab-mcp`, and if a cell fails or returns an unexpected schema, messages the active subagent via `send_message` with the traceback/output for targeted self-correction.
+3. **Sequential Specialist Dispatch & Two-Phase Flow**: Subagents write their plan and invariants to `<subagent_name>_tasks.md` and return structured payloads:
+   - `eda-agent` executes in two phases: probe & inspect first, then schema-aware visualizations and diagnostics.
+   - `model-training-agent` executes phased training: establishes a fast baseline first, reports timing and validation score, and scales candidate tuning within your compute budget.
 4. **Task-Adaptive Pipeline**: EDA, preprocessing, baselines, metrics, and visualizations automatically adapt to the task modality (**Tabular**, **NLP/LLM**, **Computer Vision**, **Time Series**, **Reinforcement Learning**, or **Unsupervised**).
-5. **Safe Quality Gate**: Before finishing, `critic-agent` audits the notebook. Only fast (`< 5s`), non-destructive leaf/display cell fixes qualify as `SAFE_AUTO_FIXES`; any change to training cells or upstream data-mutating cells is classified under `ESCALATED_FIXES` and requires user confirmation.
+5. **Multi-Gate Scoped Critic Gates (`critic-agent`)**: Rather than a single post-mortem at the very end, `critic-agent` is invoked across 3 scoped checkpoints:
+   - `post_cleaning`: Audits split independence, zero train/val leakage, and destructive operation guardrails.
+   - `post_baseline`: Audits baseline metric sanity and triggers the "too good" tripwire before candidate tuning begins.
+   - `final`: Audits mode compliance, reproducibility, labeled visualizations, and inference persistence.
+   - *Fix tiers*: Only fast (`< 5s`), non-destructive leaf/display cell fixes qualify as `SAFE_AUTO_FIXES`; any change to training cells or upstream data-mutating cells is classified under `ESCALATED_FIXES` and requires user confirmation.
 6. **Zero-Loss Export & Consent-Based Drive Sync**: The notebook is assembled into a valid `.ipynb` file (preserving outputs) via `scripts/export_to_ipynb.py` and synced to Google Drive if session Drive consent was granted.
 
 ## Installation
@@ -78,32 +84,36 @@ flowchart TD
         Discovery["dataset-discovery-agent\n(Kaggle, HuggingFace, Google Dataset Search, UCI, OpenML)"]
     end
 
-    Orchestrator <-->|"Standalone Domain Research\nOR Pre-Notebook Discovery"| Discovery
+    Orchestrator <-->|"Standalone Domain Research\nOR Pre-Notebook Discovery\n(SELECTED_DATASET Hand-off)"| Discovery
 
     subgraph NotebookGroup["Notebook Execution Pipeline (Task-Adaptive & Iterative)"]
-        direction LR
-        A["1. Mode, Engine & Consent\n(Quick Exploration default)"] --> B["2. Environment\n(env-setup-agent)"]
-        B --> C["3. EDA\n(eda-agent)"]
-        C --> D["4. Preprocessing\n(data-cleaning-agent)"]
-        D --> E["5. Model Training\n(model-training-agent)"]
-        E --> F["6. Inference\n(inference-agent)"]
-        F --> G["7. Quality Gate\n(critic-agent)"]
-        G --> H["8. Export & Optional Drive Sync\n(export_to_ipynb + gdrive)"]
+        direction TB
+        A["1. Mode, Engine & Session Consent\n(Quick Exploration default)"] --> B["2. Environment Probe & Setup\n(env-setup-agent: 2-step loop)"]
+        B --> C["3. Two-Phase Adaptive EDA\n(eda-agent: Inspect -> Diagnose)"]
+        C --> D["4. Ordered Cleaning & Splits\n(data-cleaning-agent)"]
+        D --> D_Gate{"Critic Gate 1\n(critic-agent: post_cleaning)"}
+        D_Gate --> E["5. Phased Model Training\n(model-training-agent: Baseline -> Tuning)"]
+        E --> E_Gate{"Critic Gate 2\n(critic-agent: post_baseline)"}
+        E_Gate --> F["6. Memory-Safe Inference\n(inference-agent)"]
+        F --> G{"Critic Gate 3\n(critic-agent: final)"}
+        G --> H["7. Export & Optional Drive Sync\n(export_to_ipynb + gdrive)"]
     end
 
     Orchestrator --> A
 ```
 
-- **Standalone Support Mode (No Notebook Required)**: Run `dataset-discovery-agent` standalone to search Kaggle, HuggingFace Datasets, Google Dataset Search, OpenML, and UCI without opening Colab. Uses official Python APIs and built-in web search (with optional `exa` MCP enhancement) and reports dataset **License**, **Size**, **Last Updated Date**, and **Access/Secret Requirements** (`HF_TOKEN`, `KAGGLE_KEY`).
+- **Standalone Support Mode (No Notebook Required)**: Run `dataset-discovery-agent` standalone to search Kaggle, HuggingFace Datasets, Google Dataset Search, OpenML, and UCI without opening Colab. Uses official REST APIs and search fallbacks, deduplicates cross-hub mirrors, enforces an explicit search budget ($\le 10$ queries, $\le 15$ fetches), and extracts verified metadata (**License**, **Size**, **Last Updated Date**, and **Colab Secrets**). Hands off a reproducible `SELECTED_DATASET` payload to `eda-agent`.
 - **Notebook Execution Mode**:
   1. **Mode, Engine & Session Consent**: Defaults to **`Quick Exploration`** mode (concise inline code, section headers only) unless **`Polished Deliverable`** mode is requested; asks once per session whether to sync artifacts to Google Drive.
-  2. **`env-setup-agent`**: Resolves dependencies, handles Colab runtime conflicts, configures secrets via `google.colab.userdata`, sets global random seeds (`SEED = 42`), logs core library versions, and flags C-extension installs requiring kernel restarts (`requires_restart_after: true`).
-  3. **`eda-agent`**: Logs dataset provenance (source URL, file size, SHA256/fingerprint) and runs task-adaptive exploration (tabular schemas/distributions, NLP token lengths, CV image grids/dimensions, time-series stationarity/ACF, or RL observation/action spaces).
-  4. **`data-cleaning-agent`**: Executes inline leak-free preprocessing in `Quick Exploration` mode, or writes modular `scripts/clean_XX_<name>.py` scripts, intermediate checkpoints, and `DATA_CLEANING_LOG.md` in `Polished Deliverable` mode. Adapts splits and pipelines to tabular, NLP tokenization, CV augmentations, or chronological time-series windows.
-  5. **`model-training-agent`**: Establishes a task-appropriate baseline first, logs experiments in a comparative tracking table, and generates task-matched diagnostics and explainability (SHAP/permutation importance for tabular, sample generation/confusion matrices for NLP, Grad-CAM/misclassified grids for CV, forecast overlays for time series, reward curves for RL, or silhouette/UMAP projections for unsupervised).
-  6. **`inference-agent`**: Reuses in-memory models or loads checkpoints for batch evaluation and standalone prediction.
-  7. **`critic-agent`**: Audits `<subagent_name>_tasks.md` files and live notebook outputs. Automatically applies only fast (`< 5s`) leaf/display `SAFE_AUTO_FIXES` and escalates any training or data-mutating `ESCALATED_FIXES` to the user.
-  8. **Export & Optional Drive Sync**: Reconstructs a clean `.ipynb` via `scripts/export_to_ipynb.py` and syncs to Google Drive if session Drive consent was enabled (verifying Drive file IDs and `modifiedTime` to prevent overwriting concurrent edits).
+  2. **`env-setup-agent`**: Probes the live environment in Step 1, resolves dependencies, pins packages, configures `google.colab.userdata` secrets, sets global random seeds (`SEED = 42`), logs core library versions, and executes kernel restarts safely when C-extensions are upgraded.
+  3. **`eda-agent`**: Executes in two adaptive phases (Phase 1: probe shape, types, missingness, and head samples; Phase 2: schema-aware diagnostics, distributions, correlations, and target leakage flags).
+  4. **`data-cleaning-agent`**: Follows an ordered cleaning playbook (sentinels $\rightarrow$ types $\rightarrow$ categories $\rightarrow$ deduplication $\rightarrow$ bounds $\rightarrow$ missingness $\rightarrow$ outliers). Deduplicates before splitting, asserts zero group or split overlap, logs per-column modifications, and exports split checkpoints as Parquet along with an unfitted preprocessing pipeline.
+  5. **Critic Gate 1 (`scope: "post_cleaning"`)**: `critic-agent` audits split independence, zero data leakage, and destructive operation thresholds ($> 5\%$ row drops) before any training compute is spent.
+  6. **`model-training-agent`**: Runs phased training within a user-confirmed compute budget. Phase 1 trains a fast baseline estimator and reports duration and validation metrics. Phase 2 scales candidate tuning against the baseline. Emits `ADDITIONAL_PACKAGES` to the top setup cell if late dependencies arise.
+  7. **Critic Gate 2 (`scope: "post_baseline"`)**: `critic-agent` audits baseline metric sanity, execution time, and evaluates the "too good" tripwire (`STATUS: "SUSPECTED_LEAKAGE"`) to catch target leakage early.
+  8. **`inference-agent`**: Executes memory cleanup (`torch.cuda.empty_cache()`, `gc.collect()`), resilient model loading (in-memory with checkpoint fallback), train/serve schema skew assertions, batch prediction, and persists predictions to disk.
+  9. **Critic Gate 3 (`scope: "final"`)**: `critic-agent` conducts a comprehensive final audit of mode compliance, plot formatting, and inference artifacts. Separates fast leaf fixes (`SAFE_AUTO_FIXES`) from user-escalated changes (`ESCALATED_FIXES`).
+  10. **Export & Optional Drive Sync**: Reconstructs a clean `.ipynb` via `scripts/export_to_ipynb.py` and syncs to Google Drive if session Drive consent was enabled.
 
 ## What's Inside
 
@@ -112,24 +122,24 @@ flowchart TD
 Organized into two tiers inside [`agents/`](agents/):
 
 #### 1. Orchestrator Support Subagents (`agents/support/`) — Notebook-Independent
-- **[`dataset-discovery-agent`](agents/support/dataset-discovery-agent.md)**: Searches Kaggle, HuggingFace Datasets, Google Dataset Search, UCI, OpenML, Zenodo, and PapersWithCode using resilient API/web search fallbacks. Always reports license, size, recency, and secret requirements.
+- **[`dataset-discovery-agent`](agents/support/dataset-discovery-agent.md)**: Searches dataset hubs (API-first with search fallback), deduplicates mirrors, extracts verified metadata (license, raw vs. in-memory size, Colab secrets), enforces search budgets and early stopping, and delivers a clean `SELECTED_DATASET` hand-off payload.
 
 #### 2. Notebook Execution Subagents (`agents/notebook/`)
 Each notebook subagent writes its planning rationale and verification invariants to `<subagent_name>_tasks.md` and returns executable cells in a structured `CELLS_TO_EXECUTE` JSON array:
-- **[`env-setup-agent`](agents/notebook/env-setup-agent.md)**: Hardware checks, dependency conflict resolution, `google.colab.userdata` secret retrieval, global seeds, and library version provenance.
-- **[`eda-agent`](agents/notebook/eda-agent.md)**: Dataset provenance logging and task-adaptive exploratory analysis across Tabular, NLP, CV, Time Series, and RL.
-- **[`data-cleaning-agent`](agents/notebook/data-cleaning-agent.md)**: Leak-free preprocessing and splitting in `Quick Exploration` (inline) or `Polished Deliverable` (modular `scripts/clean_*.py` + checkpoints) mode.
-- **[`model-training-agent`](agents/notebook/model-training-agent.md)**: Task-conditional baselines, comparative experiment tracking, diagnostic visualizations, and explainability.
-- **[`inference-agent`](agents/notebook/inference-agent.md)**: Batch inference, sanity checks, and formatted prediction outputs.
-- **[`critic-agent`](agents/notebook/critic-agent.md)**: Mode- and task-aware quality gate separating fast leaf/display `SAFE_AUTO_FIXES` from `ESCALATED_FIXES`.
+- **[`env-setup-agent`](agents/notebook/env-setup-agent.md)**: Two-step probe and plan loop, hardware checks, pinned dependency installation, `google.colab.userdata` secrets, global seeds, and restart recovery.
+- **[`eda-agent`](agents/notebook/eda-agent.md)**: Two-phase adaptive EDA (probe & inspect $\rightarrow$ schema-aware diagnostics), dataset provenance logging, and anomaly/leakage detection.
+- **[`data-cleaning-agent`](agents/notebook/data-cleaning-agent.md)**: Ordered cleaning playbook, per-column change logging, pre-split deduplication, group-aware splitting, Parquet checkpoints, and unfitted pipeline exports.
+- **[`model-training-agent`](agents/notebook/model-training-agent.md)**: Phased training (baseline first $\rightarrow$ candidate tuning), compute/time quotas, train-vs-val overfitting checks, "too good" tripwire, and complete inference hand-off payloads.
+- **[`inference-agent`](agents/notebook/inference-agent.md)**: Memory-safe cleanup, dual loading (memory + checkpoint fallback), train/serve skew assertions, and prediction persistence.
+- **[`critic-agent`](agents/notebook/critic-agent.md)**: Mode- and task-aware quality critic operating across 3 scoped pipeline gates (`post_cleaning`, `post_baseline`, `final`), separating leaf display fixes (`SAFE_AUTO_FIXES`) from user-escalated training/data fixes (`ESCALATED_FIXES`).
 
 ### References & Operational Guides
 
-- **[`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md)**: Operational reference for `colab-mcp` tools (with rationales), existing notebook entry flow, iterative subagent execution/retry loop via `send_message`, and failure recovery protocols (kernel restarts, variable wipes, OOM/quota limits).
+- **[`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md)**: Operational reference for `colab-mcp` tools, existing notebook entry flow, iterative subagent execution/retry loop via `send_message`, and failure recovery protocols (kernel restarts, variable wipes, OOM/quota limits).
 - **[`references/drive-sync-and-export.md`](references/drive-sync-and-export.md)**: Once-per-session Google Drive consent protocol, `.ipynb` export pipeline via `scripts/export_to_ipynb.py`, and Drive file ID collision/concurrent edit safety checks.
 - **[`best-practices/notebook-best-practices.md`](best-practices/notebook-best-practices.md)**: Universal notebook standards (seeds, zero leakage, `userdata` secrets, labeled plots) alongside `Quick Exploration` vs. `Polished Deliverable` mode guidelines.
 - **[`best-practices/pandas-best-practices.md`](best-practices/pandas-best-practices.md)**: Core pandas patterns (schema contracts, avoiding chained indexing/`iterrows()`, vectorized operations, and explicit merge validations).
-- **[`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md)**: Curated reference catalog of Python libraries across 28 domains with exact `pip package` names, engine compatibility tags (`pandas`/`polars`/`both`), Colab runtime notes, and a line-index map for targeted line-range inspection.
+- **[`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md)**: Curated reference catalog of Python libraries across 28 domains with exact `pip package` names, engine compatibility tags (`pandas`/`polars`/`both`), Colab runtime notes, profiling tools, and a line-index map for targeted line-range inspection.
 
 ### Scripts & Utilities
 
@@ -173,6 +183,7 @@ For optional synchronization into Google Drive:
 
 - **Pragmatic Ceremony (`Quick Exploration` by Default)**: Fast, clean inline code for everyday exploration, with full modular scripts and narrative documentation available on demand in `Polished Deliverable` mode.
 - **Task-Adaptive Intelligence**: NLP, CV, Time Series, RL, and Tabular tasks each get domain-appropriate baselines, splits, metrics, and diagnostics.
+- **Multi-Gate Quality Assurance**: Catching data leakage and metric tripwires early at the source (`post_cleaning`, `post_baseline`) rather than discovering them only after hours of tuning.
 - **Strict Orchestrator Control with Iterative Feedback**: Only the Orchestrator mutates live notebook state, while subagents receive real execution outputs via `send_message` to self-correct errors.
 - **Safe Quality Auditing**: Auto-fixes never silently re-run expensive training loops or invalidate downstream data state.
 
