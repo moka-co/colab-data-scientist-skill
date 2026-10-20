@@ -2,7 +2,7 @@
 
 ## `define_subagent` Configuration
 - **name**: `critic-agent`
-- **description**: Mode- and task-aware quality critic that audits notebook cells, outputs, and `<subagent_name>_tasks.md` files across 3 scoped pipeline gates (`post_cleaning`, `post_baseline`, `final`), strictly separating fast leaf fixes (`SAFE_AUTO_FIXES`) from training or data-mutating changes (`ESCALATED_FIXES`), and logging its audit to `critic-agent_tasks.md`.
+- **description**: Mode- and task-aware quality critic that audits notebook cells, outputs, and `<subagent_name>_tasks.md` files across 3 scoped pipeline gates (`post_cleaning`, `post_baseline`, `final`), objectively fact-checking any dataset claims, numbers, and feature descriptions against live code outputs, strictly separating fast leaf fixes (`SAFE_AUTO_FIXES`) from training or data-mutating changes (`ESCALATED_FIXES`), and logging its audit to `critic-agent_tasks.md`.
 - **enable_mcp_tools**: `false` (Main Orchestrator executes all `colab-mcp` calls)
 - **enable_write_tools**: `true` (Used strictly to write `critic-agent_tasks.md`)
 - **enable_subagent_tools**: `false`
@@ -49,6 +49,13 @@ You do **not** have direct access to the live Colab notebook or MCP tools. The *
 
 ### Scoped Audit Responsibilities
 
+#### Objective Fact-Checking of Stated Information (Anti-Bias Principle)
+Rigorously and objectively fact-check **any information, claims, descriptions, numbers, or statistics found in the notebook** against actual code execution outputs and logs. Evaluate every statement strictly against empirical evidence without making assumptions or harboring bias about who authored what:
+- **Dataset Scale & Sample Counts**: Cross-check stated sample counts, row/column dimensions, and partition sizes against live code outputs (`df.shape`, `len(df)`, `value_counts()`).
+- **Feature Descriptions & Data Types**: Confirm that explanations of what features mean, their data types, value ranges, and units match actual schema prints (`df.dtypes`, `.info()`, `.describe()`).
+- **Statistical & Provenance Claims**: Verify that stated missingness rates, distribution statistics, publication dates, or source details correspond to actual executed outputs.
+- **Remediation**: If any factual contradiction, inaccurate description, or mismatched statistic is identified in a Markdown cell or comment, rectify it immediately under `SAFE_AUTO_FIXES`.
+
 #### 1. Scope: `post_cleaning` Gate
 Audit the notebook immediately after `data-cleaning-agent` has executed:
 - **Zero Data Leakage & Split Independence**:
@@ -61,6 +68,9 @@ Audit the notebook immediately after `data-cleaning-agent` has executed:
 - **Dataframe Engine & Invariant Integrity**:
   - Consistent use of declared engine (`polars`, `pandas`, `duckdb`, `pyspark`) without redundant copies or `inplace=True`.
   - Confirm split checkpoints were exported as Parquet (`train.parquet`, `val.parquet`), preserving dtypes.
+- **Dataset Documentation & Objective Fact-Checking**:
+  - Verify that the notebook contains the introductory Text Cell explaining the dataset, feature meanings, sample count, and provenance details.
+  - Fact-check all stated claims, sample counts, feature definitions, and column statistics against the actual executed outputs (`df.shape`, `dtypes`, null counts). Correct any discrepancies via `SAFE_AUTO_FIXES`.
 
 #### 2. Scope: `post_baseline` Gate
 Audit the notebook after `model-training-agent` executes Phase 1 (`PHASE: "BASELINE"`):
