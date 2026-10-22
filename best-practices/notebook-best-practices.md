@@ -12,8 +12,9 @@ All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-clea
 - **Global Reproducibility Seeds**: Set `random`, `numpy`, and `torch` seeds at the top of the notebook.
 - **Zero Data Leakage**: Fit all scalers, imputers, tokenizers, and encoders strictly on training data after splitting.
 - **Secret Hygiene**: Never hardcode API keys or tokens; always load credentials via `from google.colab import userdata` or `os.environ`.
-- **Plot Quality**: Every chart must have an explicit title, labeled axes (with units where applicable), and readable legends.
+- **Plot Quality & Subplot Discipline**: Every chart must have an explicit title, labeled axes (with units where applicable), and readable legends. Avoid subplots: default to one figure per plot (figsize 8x4); allow subplots only for direct comparison of the same variable (max 2 panels, sharey=True, figsize at least 12x4); call `plt.show()` after each figure.
 - **Reliable Package Installation**: Use `!{sys.executable} -m pip install -q ...` in a consolidated setup cell so packages install into the active kernel.
+- **Clean Colab Markdown & Formatting Restraints**: Never use unsupported GitHub alert syntax (`> [!WARNING]`, `> [!NOTE]`). Do not use emojis in notebook text, headers, or comments. Avoid numbered lists; use unordered bullet lists (`-`) or sub-headers instead.
 
 ### Mode-Specific Ceremony
 | Practice | `Quick Exploration` Mode (Default) | `Polished Deliverable` Mode |
@@ -27,6 +28,17 @@ All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-clea
 ## 1. Structure & Narrative Flow
 - **Hierarchical Markdown Headers**: Use structured Markdown headers (`#`, `##`, `###`) so the notebook is navigable via the Colab table of contents.
 - **Explain the "Why", Not Just the "What"**: Use Markdown headers (or preceding cells in `Polished Deliverable` mode) to explain hypotheses, rationale, and interpretation of findings rather than restating code mechanics.
+- **Colab Markdown Standards (No Unsupported GitHub Alerts, No Emojis, No Numbered Lists)**:
+  - **No GitHub Alert Syntax**: Google Colab does NOT support GitHub Flavored Markdown alerts (`> [!NOTE]`, `> [!WARNING]`, `> [!IMPORTANT]`, `> [!TIP]`, `> [!CAUTION]`). Never write `> [!ALERT]` blocks in notebook Markdown cells—Colab renders them as raw, unstyled text. Use standard Markdown callouts instead: `> **Warning:** ...` or `> **Note:** ...`.
+  - **No Emojis**: Do not use emojis anywhere in notebook Markdown cells, code comments, or printed output. Keep all text plain, professional, and clean.
+  - **No Numbered Lists**: Do not use numbered lists (e.g., `1.`, `2.`, `3.`) in notebook narrative or explanation cells. Use clean unordered bullet lists (`-`) or distinct subheadings (`### Subtopic`) instead.
+- **Feature Glossary Table Formatting Rules**:
+  - **Max 4 columns**: `Column | Type | Domain Context | Meaning`. Never add a `Role` column; group rows under short subheaders instead (e.g. `#### Target Variable`, `#### Numerical Predictors`, `#### Categorical Features`).
+  - **Subheader Grouping**: If a column attribute is identical across all rows in a group, state it once in the subheader (e.g. `#### Financial Indicators (Type: float64)`).
+  - **Cell Conciseness**: Each cell must be single-line and at most ~60 characters. No bullets (`-`, `*`) or `<br>` line break tags inside table cells.
+  - **No LaTeX in Tables**: Do not put LaTeX math formulas, category mappings, or ranges inside table cells. Put formulas, category mappings, and valid ranges in a `"Features notes"` bullet list below the table, written once.
+  - **Inline Code Formatting**: Use backticks only for column names (e.g. `` `col_name` ``).
+  - **Table Width**: Total rendered table width must fit ~100 characters; if it doesn't, split into more groups with separate subheaders.
 - **Conclusions & Next Steps**: End the notebook with a summary cell highlighting final results, metrics, caveats/limitations, and suggested next steps.
 
 ---
@@ -54,8 +66,11 @@ All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-clea
   ```
 - **Visual Progress with `tqdm`**:
   - Wrap long-running loops, downloads, or batch iterations with `tqdm.auto.tqdm`.
-- **Plot Quality & Labeling**:
-  - Every chart must have explicit titles, axis labels with units, clear legends, and `plt.tight_layout()` / `plt.show()`.
+- **Plot Quality, Labeling & Subplot Avoidance**:
+  - **Default: One Figure Per Plot**: One idea per figure, with a descriptive title, labeled axes with units, and readable legends. Use a consistent figsize (e.g. `8x4`).
+  - **No Overview Subplot Grids**: Do not use subplot grids for overviews of many columns. Produce one plot per column, or only the most informative ones, and explicitly state which were skipped.
+  - **Strict Subplot Exception**: Subplots are allowed only for direct comparison on the same variable (e.g. train vs. test, before vs. after), max 2 panels, shared axis scales (`sharey=True`), and figsize at least `12x4`.
+  - **Explicit Figure Display & Cleanup**: Call `plt.show()` after each figure. Call `plt.close()` to prevent memory bloat.
 
 ---
 
@@ -130,7 +145,8 @@ All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-clea
 - [ ] Secrets use `google.colab.userdata` or environment variables—zero plaintext keys.
 - [ ] Data provenance (source, size, shape) and early sanity assertions are logged on load.
 - [ ] Zero data leakage: preprocessing transformers are fit strictly on training splits.
-- [ ] Task-appropriate baseline model, evaluation metrics, and labeled visualizations are present.
+- [ ] Task-appropriate baseline model, evaluation metrics, and labeled visualizations are present (avoiding subplot grids; 8x4 single plots; max 2 comparison panels, sharey=True, 12x4; plt.show() after each).
+- [ ] Markdown cells use clean Colab-supported formatting (no raw `> [!ALERT]` blocks, no emojis, no numbered lists; bullet points or subheaders only).
 - [ ] Notebook concludes with a summary of results, limitations, and next steps.
 
 ### Additional Checks for `Polished Deliverable` Mode

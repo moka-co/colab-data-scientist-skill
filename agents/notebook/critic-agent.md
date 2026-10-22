@@ -70,6 +70,7 @@ Audit the notebook immediately after `data-cleaning-agent` has executed:
   - Confirm split checkpoints were exported as Parquet (`train.parquet`, `val.parquet`), preserving dtypes.
 - **Dataset Documentation & Objective Fact-Checking**:
   - Verify that the notebook contains the introductory Text Cell explaining the dataset, feature meanings, sample count, and provenance details.
+  - Check feature glossary table formatting: max 4 columns (`Column | Type | Domain Context | Meaning`), no `Role` column (grouped under subheaders), cells $\le 60$ chars without `<br>`/bullets, no LaTeX inside cells (notes/mappings in `"Features notes"` below), backticks only on column names, and table width $\le 100$ characters.
   - Fact-check all stated claims, sample counts, feature definitions, and column statistics against the actual executed outputs (`df.shape`, `dtypes`, null counts). Correct any discrepancies via `SAFE_AUTO_FIXES`.
 
 #### 2. Scope: `post_baseline` Gate
@@ -84,10 +85,12 @@ Audit the notebook after `model-training-agent` executes Phase 1 (`PHASE: "BASEL
 #### 3. Scope: `final` Gate
 Audit the completed notebook after inference and model training are finished:
 - **Workflow Mode Compliance**:
-  - **Universal Rules (`quick` and `polished`)**: Clean execution order, random seeds set (`SEED = 42`), credentials via `google.colab.userdata`, and final summary cell.
+  - **Universal Rules (`quick` and `polished`)**: Clean execution order, random seeds set (`SEED = 42`), credentials via `google.colab.userdata`, clean Colab-supported Markdown (no unsupported `> [!ALERT]` blocks, no emojis, no numbered lists), and final summary cell.
   - **`Polished Deliverable` Only**: Modular script extraction (`scripts/clean_XX_*.py`), `DATA_CLEANING_LOG.md`, Parquet checkpoints, `%%time` on every cell, `printmd()` styling. Do **not** penalize `quick` mode for omitting these.
 - **Visualizations & Explainability**:
-  - Plots labeled properly. Modality-appropriate explainability present (SHAP/permutation importance for tabular models; do not force tabular SHAP on deep CV, audio, or RL models).
+  - Plots labeled properly with explicit titles, axis labels, and units.
+  - Subplot discipline: verify no multi-column subplot grids were used; charts follow the single-figure rule (figsize ~8x4) or max 2 panels for direct comparison on the same variable (`sharey=True`, figsize at least 12x4). `plt.show()` called after each figure.
+  - Modality-appropriate explainability present (SHAP/permutation importance for tabular models; do not force tabular SHAP on deep CV, audio, or RL models).
 - **Inference Resiliency & Persistence**:
   - Memory cleanup (`gc.collect()`, `torch.cuda.empty_cache()`) executed before inference.
   - Resilient load cell with checkpoint fallback tested.
@@ -101,7 +104,7 @@ Editing upstream data cells invalidates downstream memory, and re-running model 
 
 1. **`SAFE_AUTO_FIXES` (Orchestrator auto-applies in Colab via `update_cell` + `run_code_cell` or `add_text_cell`/`add_code_cell`)**:
    - **Definition**: Changes touching **only leaf / display / evaluation / plotting / markdown cells**, executing in **`< 5 seconds`**, and **never** mutating upstream datasets (`df`, `X_train`) or re-running model training (`.fit()`, training loops).
-   - *Examples*: Fixing plot titles/axis labels/legends, printing an already-computed metric from an existing model variable, silencing a non-critical plotting warning, adding a missing Markdown explanation.
+   - *Examples*: Fixing plot titles/axis labels/legends, printing an already-computed metric from an existing model variable, silencing a non-critical plotting warning, adding a missing Markdown explanation, reformatting bloated feature tables to the 4-column layout with external feature notes, converting unsupported GitHub alert syntax (`> [!WARNING]`, `> [!NOTE]`, etc.) or emojis/numbered lists to clean Colab-compatible markdown (`> **Warning:** ...`, bullet lists).
 
 2. **`ESCALATED_FIXES` (Orchestrator MUST halt and ask the user via `ask_question` before applying)**:
    - **Definition**: Any fix modifying **upstream data-cleaning/splitting cells** (requiring re-splitting and downstream invalidation), **model training cells** (requiring re-fitting), **hyperparameters/model architecture**, or any cell taking `>= 5 seconds`.

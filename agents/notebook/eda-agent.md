@@ -52,7 +52,14 @@ Return a focused batch of inspection cells:
      - **Collector / Source**: Who collected, created, or curated the dataset (authors, research team, institution, or organization, if known/possible from metadata, dataset card, or repository).
      - **Publication Date**: When the dataset was published, released, or last updated (if known/possible).
      - **Number of Samples**: Total number of samples, rows, observations, or instances (overall and across splits if known).
-     - **Feature Meanings (Feature Glossary / Dictionary)**: An explicit explanation of **what each feature (column) means**, its domain context, units or allowed values, and its role (feature, identifier, timestamp, or target).
+     - **Feature Meanings (Feature Glossary)**: A clean, human-readable table explaining each feature according to the strict formatting rules below.
+   - **Feature Glossary Output Format Rules**:
+     - **Max 4 columns**: `Column | Type | Domain Context | Meaning`. Never add a `Role` column; group rows under short subheaders instead (e.g. `#### Target Variable`, `#### Numerical Predictors`, `#### Categorical Features`).
+     - **Subheader Grouping**: If a column is identical on every row of a group, state it once in the subheader (e.g. `#### Financial Indicators (Type: float64)`).
+     - **Cell Conciseness**: Each cell max ~60 characters, single line. No bullets or `<br>` tags inside cells.
+     - **No LaTeX in Tables**: Put formulas, category mappings, and ranges in a `"Features notes"` list below the table, written once.
+     - **Inline Code Formatting**: Use backticks only for column names (e.g. `` `col_name` ``).
+     - **Table Width**: Total table width must fit ~100 characters; if it doesn't, split into more groups with separate subheaders.
    - This Text Cell MUST be provided as part of the EDA documentation at the start of analysis. If exact sample counts or full feature rosters are confirmed during runtime execution, refine the Text Cell so the information strictly matches the inspected dataset.
 2. **Pinned Data Acquisition & Provenance**:
    - For Hugging Face datasets: always specify and record `revision` (commit hash or tag): `load_dataset(..., revision=...)`.
@@ -87,7 +94,7 @@ Using the actual column count, data types, and scale confirmed from Phase 1, ret
      - For classification: compute class balance ratios (flag minority class if $< 10\%$).
    - **Zero Leakage Rule**:
      - If splits already exist, compute target-feature correlations and predictive checks strictly on the `train` split.
-     - If no split exists yet, clearly label target-aware statistics as *"full-data, exploratory"* and warn downstream agents that feature selection must be fit strictly on the training partition.
+     - If no split exists yet, clearly label target-aware statistics as *"full-data, exploratory"* and warn downstream agents that feature selection must be fit strictly on the training partition (using standard markdown `> **Warning (Target Leakage Prohibition Invariant):** ...`, never unsupported `> [!WARNING]`).
    - **Concrete Leakage & Anomaly Heuristics**:
      - **ID-like columns**: Cardinality ratio $> 0.99$ (unique values / row count $\approx 1.0$) on non-target columns.
      - **Constant / Near-constant**: Columns with 1 unique value, or most frequent value $> 99\%$.
@@ -122,9 +129,12 @@ Using the actual column count, data types, and scale confirmed from Phase 1, ret
 
 ---
 
-### Plot Quality & Notebook Sizing
-- **Static Plots Default**: Use `matplotlib` and `seaborn` exclusively. Always include explicit titles, axis labels with units, and call `plt.tight_layout()`.
-- **Resource Cleanup**: Always call `plt.show()` and `plt.close()` to prevent unclosed figures from bloating Colab's notebook JSON memory. Avoid interactive Plotly figures that bloat `.ipynb` exports.
+### Plot Quality, Subplot Avoidance & Notebook Sizing
+- **Plotting Rules (Avoid Subplots as Much as Possible)**:
+  - **Default**: One figure per plot, one idea per figure, with a title, labeled axes and units. Use a consistent figsize (e.g. `8x4` / `(8, 4)`).
+  - **No Overview Subplot Grids**: Do not use subplot grids for overviews of many columns. Produce one plot per column, or only the most informative ones, and explicitly state in markdown which were skipped.
+  - **Strict Subplot Exception**: Subplots are allowed only for direct comparison on the same variable (e.g. train vs. test, before vs. after), max 2 panels, shared axis scales (`sharey=True`), and figsize at least `12x4` / `(12, 4)`. (For computer vision, a small thumbnail grid like 3x3 is permitted solely to inspect image samples).
+  - **Display & Cleanup**: Call `plt.show()` after each figure, followed by `plt.close()` to prevent memory bloat. Avoid interactive Plotly figures that bloat `.ipynb` exports.
 
 ---
 
@@ -158,7 +168,7 @@ Separate planning metadata from executable cells:
   "CELLS": [
     {
       "type": "markdown",
-      "content": "## Exploratory Data Analysis & Data Provenance\n\n### Dataset Overview & Feature Dictionary\n- **Dataset**: <Name or Source>\n- **Collector / Source**: <Authors / Institution / Curators (if available)>\n- **Published Date**: <Release or Last Updated Date (if available)>\n- **Number of Samples**: <N rows / observations>\n\n#### Feature Glossary\n| Feature | Meaning & Domain Context | Expected Type / Values |\n|---|---|---|\n| `feature_1` | Description of what feature_1 represents... | Numeric (units) |\n| `feature_2` | Description of what feature_2 represents... | Categorical (categories) |"
+      "content": "## Exploratory Data Analysis & Data Provenance\n\n### Dataset Overview\n- **Dataset**: <Name or Source>\n- **Collector / Source**: <Authors / Institution / Curators (if available)>\n- **Published Date**: <Release or Last Updated Date (if available)>\n- **Number of Samples**: <N rows / observations>\n\n### Feature Glossary\n\n#### Target Variable\n| Column | Type | Domain Context | Meaning |\n|---|---|---|---|\n| `target_col` | int64 | Outcome | Binary conversion indicator |\n\n#### Numerical Features\n| Column | Type | Domain Context | Meaning |\n|---|---|---|---|\n| `feature_1` | float64 | Finance | Normalized transaction amount |\n\n### Features notes\n- `target_col`: 1 = converted, 0 = not converted\n- `feature_1`: Valid normalized range [0.0, 1.0]"
     },
     {
       "type": "code",
@@ -168,7 +178,7 @@ Separate planning metadata from executable cells:
   "CELLS_TO_EXECUTE": [
     {
       "type": "markdown",
-      "content": "## Exploratory Data Analysis & Data Provenance\n\n### Dataset Overview & Feature Dictionary\n- **Dataset**: <Name or Source>\n- **Collector / Source**: <Authors / Institution / Curators (if available)>\n- **Published Date**: <Release or Last Updated Date (if available)>\n- **Number of Samples**: <N rows / observations>\n\n#### Feature Glossary\n| Feature | Meaning & Domain Context | Expected Type / Values |\n|---|---|---|\n| `feature_1` | Description of what feature_1 represents... | Numeric (units) |\n| `feature_2` | Description of what feature_2 represents... | Categorical (categories) |"
+      "content": "## Exploratory Data Analysis & Data Provenance\n\n### Dataset Overview\n- **Dataset**: <Name or Source>\n- **Collector / Source**: <Authors / Institution / Curators (if available)>\n- **Published Date**: <Release or Last Updated Date (if available)>\n- **Number of Samples**: <N rows / observations>\n\n### Feature Glossary\n\n#### Target Variable\n| Column | Type | Domain Context | Meaning |\n|---|---|---|---|\n| `target_col` | int64 | Outcome | Binary conversion indicator |\n\n#### Numerical Features\n| Column | Type | Domain Context | Meaning |\n|---|---|---|---|\n| `feature_1` | float64 | Finance | Normalized transaction amount |\n\n### Features notes\n- `target_col`: 1 = converted, 0 = not converted\n- `feature_1`: Valid normalized range [0.0, 1.0]"
     },
     {
       "type": "code",
