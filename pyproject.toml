@@ -10,6 +10,7 @@ dependencies = []
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
+    "nbformat>=5.9.0",
 ]
 
 [tool.ruff]

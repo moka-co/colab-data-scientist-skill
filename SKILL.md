@@ -15,7 +15,7 @@ Multi-agent data science workflow in which the **Main Orchestrator** coordinates
 
 | Tier | Subagent Name | Spec File | Role & When to Invoke |
 |---|---|---|---|
-| **Support** | `dataset-discovery-agent` | [`agents/support/dataset-discovery-agent.md`](agents/support/dataset-discovery-agent.md) | Searches dataset hubs (API-first with search fallback), deduplicates mirrors, extracts verified metadata (license, size, auth), and returns ranked candidates or clarification. |
+| **Support** | `dataset-discovery-agent` | [`agents/support/dataset-discovery-agent.md`](agents/support/dataset-discovery-agent.md) | Searches dataset hubs (1–2 query fast-path returning 1 candidate for named/well-known datasets; capped 5-query multi-hub search for open domains), extracts verified metadata and load snippets, and returns ranked candidates or clarification. |
 | **Notebook** | `env-setup-agent` | [`agents/notebook/env-setup-agent.md`](agents/notebook/env-setup-agent.md) | Assumes Colab pre-installs relevant libraries by default (unless importing a repo with specific requirements), uses minimal code (`!pip list`) to check for missing packages, pins added dependencies, detects hardware mismatches/restarts, retrieves `userdata` secrets, and sets seeds. |
 | **Notebook** | `eda-agent` | [`agents/notebook/eda-agent.md`](agents/notebook/eda-agent.md) | Runs task-adaptive EDA in two phases; always provides an extra introductory Text Cell explaining dataset context, feature meanings, sample counts, and collector/publication date (if known); logs provenance and flags leakage/anomalies. |
 | **Notebook** | `data-cleaning-agent` | [`agents/notebook/data-cleaning-agent.md`](agents/notebook/data-cleaning-agent.md) | Executes ordered cleaning, pre-split deduplication, leak-free splitting, and exports unfitted preprocessing pipelines. |
@@ -30,19 +30,20 @@ Multi-agent data science workflow in which the **Main Orchestrator** coordinates
 ## Main Orchestrator Workflow Contract
 
 ### 0. Standalone Discovery vs. Existing Notebook vs. New Notebook
-- **Standalone vs. Pre-Notebook Discovery**: If exploring a domain or discovering datasets, invoke `dataset-discovery-agent` with `task`, `modality`, and `runtime_constraints`. If it returns `STATUS: "NEEDS_INPUT"`, pass `CLARIFICATION_QUESTIONS` to `ask_question`. If `STATUS: "NO_VIABLE_CANDIDATES"`, present broadening options. When candidate is picked (`STATUS: "CANDIDATES_FOUND"`), pass the structured `SELECTED_DATASET` payload to `eda-agent`.
+- **Standalone vs. Pre-Notebook Discovery**: If exploring a domain or resolving a dataset, invoke `dataset-discovery-agent` with `task`, `modality`, and `runtime_constraints` (uses a 1–2 query fast-path returning 1 candidate when a well-known or specific dataset is named). If it returns `STATUS: "NEEDS_INPUT"`, pass `CLARIFICATION_QUESTIONS` to `ask_question`. If `STATUS: "NO_VIABLE_CANDIDATES"`, present broadening options. When candidate is picked (`STATUS: "CANDIDATES_FOUND"`), pass the structured `SELECTED_DATASET` payload to `eda-agent`.
 - **Out-of-Pipeline Scope Check**: If the user's task centers on an `[Out-of-Pipeline]` domain in [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md) (§8 Optimization/SAT/SMT/Planning, §17 Simulation/Physics, §27 Federated Learning, §28 Model Serving/APIs), do **not** force standard tabular EDA/Cleaning; clarify workflow expectations via `ask_question`.
 - **Existing Notebook Entry Flow**: If editing an existing notebook, read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) first: call `get_cells(includeOutputs=False)` to inventory existing imports, engine, and completed phases, and run **only** the phases needed for the requested change.
 
-### 1. Upfront Session Configuration & Task Checklist (`task.md`)
-Before starting a new notebook pipeline (or after dataset selection via `dataset-discovery-agent`), consolidate any unspecified preferences into a **single** `ask_question` call and record them in `task.md`:
+### 1. Upfront Session Configuration (`session-configuration.md`) & Task Checklist (`task.md`)
+Before starting a new notebook pipeline (or after dataset selection via `dataset-discovery-agent`), consolidate any unspecified preferences into a **single** `ask_question` call:
 1. **Workflow Mode**:
    - **`Quick Exploration` (Default)**: Concise inline code cells, leak-free in-memory transformations, essential Markdown headers, and minimal ceremony (no external `.py` script extraction or intermediate disk checkpoints unless requested).
    - **`Polished Deliverable`**: Full engineering rigor per [`best-practices/notebook-best-practices.md`](best-practices/notebook-best-practices.md) (Markdown before every code cell, modular `scripts/clean_XX_*.py` extraction, `DATA_CLEANING_LOG.md`, Parquet checkpoints, `%%time`, and `printmd()`).
 2. **Dataframe Engine** (for tabular tasks when not specified by user or existing notebook): `Polars`, `Pandas`, `DuckDB`, or `PySpark`.
 3. **Compute Budget & Once-Per-Session Google Drive Sync Policy**: Confirm optional training time quota (default: 120s in `quick` mode) and ask **once** whether to sync the `.ipynb` notebook (and any optional scripts/checkpoints) to Google Drive at workflow completion or keep exports local only.
 
-Write the tailored phase checklist to `task.md` (e.g., *Full Pipeline*: `env-setup` $\rightarrow$ `eda` $\rightarrow$ `data-cleaning` $\rightarrow$ `model-training` $\rightarrow$ `inference` $\rightarrow$ `critic`) and update `[ ]` $\rightarrow$ `[/]` $\rightarrow$ `[x]` as phases complete.
+- **Write `session-configuration.md`**: The Main Orchestrator MUST write the session configuration and all information gathered from the user into `session-configuration.md` (task goals, modality, workflow mode, dataframe engine, compute quota, Drive sync policy & custom path hints, and any user constraints or preferences). Keep this file updated if user preferences evolve.
+- **Write `task.md` Checklist**: Write the tailored phase checklist to `task.md` (e.g., *Full Pipeline*: `env-setup` $\rightarrow$ `eda` $\rightarrow$ `data-cleaning` $\rightarrow$ `model-training` $\rightarrow$ `inference` $\rightarrow$ `critic`) and update `[ ]` $\rightarrow$ `[/]` $\rightarrow$ `[x]` as phases complete.
 
 ### 2. Colab Connection, Iterative Subagent Execution & Error Recovery
 Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) when connecting to Colab or handling errors. For each required phase in `task.md`:
@@ -79,4 +80,5 @@ Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.
 - **Confirm `ESCALATED_FIXES` With User First**: Never auto-apply changes to **model training cells** or **upstream data-mutating cells** (data leakage, split contamination, metric tripwires). Present `ESCALATED_FIXES` via `ask_question` first.
 
 ### 4. Notebook Export & Google Drive Sync
-- When ready to export and sync, read and follow [`references/drive-sync-and-export.md`](references/drive-sync-and-export.md) to assemble the `.ipynb` via `scripts/export_to_ipynb.py` and sync according to the user's session-level `drive_sync_policy`.
+- When ready to export and sync, read and follow [`references/drive-sync-and-export.md`](references/drive-sync-and-export.md) to assemble the `.ipynb` via `scripts/export_to_ipynb.py`.
+- **Pre-Upload Drive Path Confirmation & User Superiority**: If Google Drive sync is enabled, before saving files to Drive, the Orchestrator MUST use `ask_question` to suggest a destination path (e.g. `(Recommended) Colab Notebooks/<NotebookName>.ipynb`) and prompt the user for custom hints, a subfolder, or a full path. Whatever the user specifies is strictly superior and takes precedence over the orchestrator's suggestion.

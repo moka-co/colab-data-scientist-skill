@@ -24,7 +24,7 @@ A complete data science and machine learning workflow methodology for coding age
 
 When you ask your agent to discover datasets or build, run, or debug a notebook in Google Colab, the **Main Orchestrator** sets up a structured workflow tailored to your task:
 
-1. **Upfront Alignment (`ask_question`)**: The Orchestrator confirms your **Workflow Mode** (**`Quick Exploration`** by default for fast, low-ceremony inline code, or **`Polished Deliverable`** for full Markdown narratives, modular `scripts/clean_*.py` scripts, and intermediate checkpoints), your preferred dataframe engine (**Pandas**, **Polars**, **DuckDB**, or **PySpark**), training time quota, and asks **once per session** whether to enable Google Drive synchronization.
+1. **Upfront Alignment (`ask_question`) & Session Configuration**: The Orchestrator confirms your **Workflow Mode** (**`Quick Exploration`** by default for fast, low-ceremony inline code, or **`Polished Deliverable`** for full Markdown narratives, modular `scripts/clean_*.py` scripts, and intermediate checkpoints), your preferred dataframe engine (**Pandas**, **Polars**, **DuckDB**, or **PySpark**), training time quota, and asks **once per session** whether to enable Google Drive synchronization. All configuration and gathered user requirements are recorded into `session-configuration.md`.
 2. **Existing Notebook Inventory**: If attaching to an existing notebook, the Orchestrator inspects existing cells via `get_cells(includeOutputs=False)`, summarizes what already exists, and skips completed phases.
 3. **Sequential Specialist Dispatch & Two-Phase Flow**: Subagents write their plan and invariants to `<subagent_name>_tasks.md` and return structured payloads:
    - `eda-agent` executes in two phases: probe & inspect first, then schema-aware visualizations and diagnostics.
@@ -35,7 +35,7 @@ When you ask your agent to discover datasets or build, run, or debug a notebook 
    - `post_baseline`: Audits baseline metric sanity and triggers the "too good" tripwire before candidate tuning begins.
    - `final`: Audits mode compliance, reproducibility, labeled visualizations, and inference persistence.
    - *Fix tiers*: Only fast (`< 5s`), non-destructive leaf/display cell fixes qualify as `SAFE_AUTO_FIXES`; any change to training cells or upstream data-mutating cells is classified under `ESCALATED_FIXES` and requires user confirmation.
-6. **Zero-Loss Export & Consent-Based Drive Sync**: The notebook is assembled into a valid `.ipynb` file (preserving outputs) via `scripts/export_to_ipynb.py` and synced to Google Drive if session Drive consent was granted.
+6. **Zero-Loss Export & Consent-Based Drive Sync**: The notebook is assembled into a valid `.ipynb` file (preserving outputs) via `scripts/export_to_ipynb.py`. If Google Drive sync is enabled, the Orchestrator prompts the user via `ask_question` to suggest a Drive destination path while honoring any user-provided path or hints above all suggestions.
 
 ## Installation
 
@@ -104,7 +104,7 @@ flowchart TD
 
 - **Standalone Support Mode (No Notebook Required)**: Run `dataset-discovery-agent` standalone to search Kaggle, HuggingFace Datasets, Google Dataset Search, OpenML, and UCI without opening Colab. Uses official REST APIs and search fallbacks, deduplicates cross-hub mirrors, enforces an explicit search budget ($\le 10$ queries, $\le 15$ fetches), and extracts verified metadata (**License**, **Size**, **Last Updated Date**, and **Colab Secrets**). Hands off a reproducible `SELECTED_DATASET` payload to `eda-agent`.
 - **Notebook Execution Mode**:
-  1. **Mode, Engine & Session Consent**: Defaults to **`Quick Exploration`** mode (concise inline code, section headers only) unless **`Polished Deliverable`** mode is requested; asks once per session whether to sync artifacts to Google Drive.
+  1. **Mode, Engine & Session Configuration**: Defaults to **`Quick Exploration`** mode (concise inline code, section headers only) unless **`Polished Deliverable`** mode is requested; asks once per session whether to sync artifacts to Google Drive. The orchestrator records all session configuration and gathered user preferences into `session-configuration.md`.
   2. **`env-setup-agent`**: Assumes Colab pre-installs relevant libraries by default (unless importing a repo with specific manifests), probes installed packages with minimal code (`!pip list`), installs only missing dependencies, configures `google.colab.userdata` secrets, sets global random seeds (`SEED = 42`), and executes kernel restarts safely when C-extensions are upgraded.
   3. **`eda-agent`**: Executes in two adaptive phases (Phase 1: probe shape, types, missingness, and head samples; Phase 2: schema-aware diagnostics, distributions, correlations, and target leakage flags); always includes an extra introductory Text Cell explaining the dataset, feature meanings, sample counts, and collector/publication date (if known).
   4. **`data-cleaning-agent`**: Follows an ordered cleaning playbook (sentinels $\rightarrow$ types $\rightarrow$ categories $\rightarrow$ deduplication $\rightarrow$ bounds $\rightarrow$ missingness $\rightarrow$ outliers). Deduplicates before splitting, asserts zero group or split overlap, logs per-column modifications, and exports split checkpoints as Parquet along with an unfitted preprocessing pipeline.
@@ -113,7 +113,7 @@ flowchart TD
   7. **Critic Gate 2 (`scope: "post_baseline"`)**: `critic-agent` audits baseline metric sanity, execution time, and evaluates the "too good" tripwire (`STATUS: "SUSPECTED_LEAKAGE"`) to catch target leakage early.
   8. **`inference-agent`**: Executes memory cleanup (`torch.cuda.empty_cache()`, `gc.collect()`), resilient model loading (in-memory with checkpoint fallback), train/serve schema skew assertions, batch prediction, and persists predictions to disk.
   9. **Critic Gate 3 (`scope: "final"`)**: `critic-agent` conducts a comprehensive final audit of mode compliance, plot formatting, and inference artifacts. Separates fast leaf fixes (`SAFE_AUTO_FIXES`) from user-escalated changes (`ESCALATED_FIXES`).
-  10. **Export & Optional Drive Sync**: Reconstructs a clean `.ipynb` via `scripts/export_to_ipynb.py` and syncs to Google Drive if session Drive consent was enabled.
+  10. **Export & Optional Drive Sync**: Reconstructs a clean `.ipynb` via `scripts/export_to_ipynb.py`. Before saving to Google Drive, the Orchestrator prompts the user via `ask_question` with a suggested path; the user may select it or provide custom hints/paths, which strictly take precedence.
 
 ## What's Inside
 
@@ -136,7 +136,7 @@ Each notebook subagent writes its planning rationale and verification invariants
 ### References & Operational Guides
 
 - **[`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md)**: Operational reference for `colab-mcp` tools, existing notebook entry flow, iterative subagent execution/retry loop via `send_message`, and failure recovery protocols (kernel restarts, variable wipes, OOM/quota limits).
-- **[`references/drive-sync-and-export.md`](references/drive-sync-and-export.md)**: Once-per-session Google Drive consent protocol, `.ipynb` export pipeline via `scripts/export_to_ipynb.py`, and Drive file ID collision/concurrent edit safety checks.
+- **[`references/drive-sync-and-export.md`](references/drive-sync-and-export.md)**: Once-per-session Google Drive consent protocol, pre-upload target path confirmation with user priority rule, `.ipynb` export pipeline via `scripts/export_to_ipynb.py`, and Drive file ID collision/concurrent edit safety checks.
 - **[`best-practices/notebook-best-practices.md`](best-practices/notebook-best-practices.md)**: Universal notebook standards (seeds, zero leakage, `userdata` secrets, labeled plots) alongside `Quick Exploration` vs. `Polished Deliverable` mode guidelines.
 - **[`best-practices/pandas-best-practices.md`](best-practices/pandas-best-practices.md)**: Core pandas patterns (schema contracts, avoiding chained indexing/`iterrows()`, vectorized operations, and explicit merge validations).
 - **[`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md)**: Curated reference catalog of Python libraries across 28 domains with exact `pip package` names, engine compatibility tags (`pandas`/`polars`/`both`), Colab runtime notes, profiling tools, and a line-index map for targeted line-range inspection.

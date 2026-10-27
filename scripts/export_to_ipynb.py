@@ -49,22 +49,43 @@ def sanitize_outputs(outputs: list) -> list:
     sanitized = []
     for out in outputs:
         if not isinstance(out, dict):
-            sanitized.append(out)
             continue
 
         item = dict(out)
         out_type = item.get("output_type")
 
         if out_type == "stream":
+            item.setdefault("name", "stdout")
             text = item.get("text", "")
             if isinstance(text, list):
                 item["text"] = [clean_output_text(line) for line in text]
             elif isinstance(text, str):
                 item["text"] = clean_output_text(text)
+            else:
+                item["text"] = ""
         elif out_type == "error":
+            item.setdefault("ename", "Error")
+            item.setdefault("evalue", "")
             traceback = item.get("traceback", [])
             if isinstance(traceback, list):
                 item["traceback"] = [clean_output_text(line) for line in traceback]
+            elif isinstance(traceback, str):
+                item["traceback"] = [
+                    clean_output_text(line) for line in traceback.splitlines(keepends=True)
+                ]
+            else:
+                item["traceback"] = []
+        elif out_type in ("execute_result", "display_data"):
+            if not isinstance(item.get("metadata"), dict):
+                item["metadata"] = {}
+            if not isinstance(item.get("data"), dict):
+                item["data"] = {}
+            if out_type == "execute_result" and "execution_count" not in item:
+                item["execution_count"] = None
+        else:
+            if "metadata" in item and not isinstance(item.get("metadata"), dict):
+                item["metadata"] = {}
+
         sanitized.append(item)
     return sanitized
 
@@ -124,12 +145,23 @@ def build_notebook(cells_data: dict, output_map: dict[str, str], notebook_name: 
         cell_type = cell.get("cell_type", "code")
         cell_id = cell.get("id", "")
         source_lines = normalize_source(cell.get("source", []))
+        metadata = dict(cell.get("metadata", {})) if isinstance(cell.get("metadata"), dict) else {}
+        if cell_id and "id" not in metadata:
+            metadata["id"] = cell_id
 
         if cell_type == "markdown":
             nb_cells.append(
                 {
                     "cell_type": "markdown",
-                    "metadata": {"id": cell_id} if cell_id else {},
+                    "metadata": metadata,
+                    "source": source_lines,
+                }
+            )
+        elif cell_type == "raw":
+            nb_cells.append(
+                {
+                    "cell_type": "raw",
+                    "metadata": metadata,
                     "source": source_lines,
                 }
             )
@@ -149,7 +181,7 @@ def build_notebook(cells_data: dict, output_map: dict[str, str], notebook_name: 
                 {
                     "cell_type": "code",
                     "execution_count": cell.get("execution_count") or exec_counter,
-                    "metadata": {"id": cell_id} if cell_id else {},
+                    "metadata": metadata,
                     "outputs": sanitized_outputs,
                     "source": source_lines,
                 }
@@ -167,6 +199,71 @@ def build_notebook(cells_data: dict, output_map: dict[str, str], notebook_name: 
         },
         "cells": nb_cells,
     }
+
+
+def validate_notebook(notebook: dict) -> None:
+    """Validate notebook dict structure against nbformat v4 schema."""
+    try:
+        import nbformat
+
+        nbformat.validate(notebook)
+        return
+    except ImportError:
+        pass
+
+    # Built-in lightweight schema validator if nbformat is not installed
+    if not isinstance(notebook, dict):
+        raise ValueError("Notebook must be a dict")
+    for req in ("nbformat", "nbformat_minor", "metadata", "cells"):
+        if req not in notebook:
+            raise ValueError(f"Notebook missing required top-level property: '{req}'")
+    if not isinstance(notebook.get("cells"), list):
+        raise ValueError("Notebook 'cells' must be a list")
+
+    for idx, cell in enumerate(notebook["cells"]):
+        if not isinstance(cell, dict):
+            raise ValueError(f"Cell {idx} must be a dict")
+        if "cell_type" not in cell:
+            raise ValueError(f"Cell {idx} missing required property: 'cell_type'")
+        if "metadata" not in cell or not isinstance(cell["metadata"], dict):
+            raise ValueError(f"Cell {idx} missing required property: 'metadata'")
+        if "source" not in cell:
+            raise ValueError(f"Cell {idx} missing required property: 'source'")
+
+        ct = cell["cell_type"]
+        if ct == "code":
+            if "execution_count" not in cell:
+                raise ValueError(f"Cell {idx} (code) missing required property: 'execution_count'")
+            if "outputs" not in cell or not isinstance(cell["outputs"], list):
+                raise ValueError(f"Cell {idx} (code) missing required property: 'outputs'")
+            for out_idx, out in enumerate(cell["outputs"]):
+                if not isinstance(out, dict):
+                    raise ValueError(f"Cell {idx} output {out_idx} must be a dict")
+                ot = out.get("output_type")
+                if not ot:
+                    raise ValueError(f"Cell {idx} output {out_idx} missing 'output_type'")
+                if ot in ("display_data", "execute_result"):
+                    if "metadata" not in out or not isinstance(out["metadata"], dict):
+                        raise ValueError(
+                            f"Cell {idx} output {out_idx} ({ot}) "
+                            "missing required property: 'metadata'"
+                        )
+                    if "data" not in out or not isinstance(out["data"], dict):
+                        raise ValueError(
+                            f"Cell {idx} output {out_idx} ({ot}) "
+                            "missing required property: 'data'"
+                        )
+                elif ot == "stream":
+                    if "name" not in out or "text" not in out:
+                        raise ValueError(
+                            f"Cell {idx} output {out_idx} (stream) missing 'name' or 'text'"
+                        )
+                elif ot == "error":
+                    for prop in ("ename", "evalue", "traceback"):
+                        if prop not in out:
+                            raise ValueError(
+                                f"Cell {idx} output {out_idx} (error) missing '{prop}'"
+                            )
 
 
 def main() -> None:
@@ -198,6 +295,7 @@ def main() -> None:
 
     cells_data = load_json(args.cells_json)
     notebook = build_notebook(cells_data, output_map, args.name)
+    validate_notebook(notebook)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -17,7 +17,7 @@ Uploading files to a user's Google Drive modifies their cloud account and may in
      - `Sync everything (notebook, scripts, logs, and data/intermediate/* checkpoints)`
      - `Keep local only (export .ipynb locally without uploading to Google Drive)`
 2. **Remember & Honor the Choice**:
-   - Record the user's choice in `task.md` (`drive_sync_policy`) and apply it consistently across the rest of the session and any subsequent edits—never ask contradictory offloading questions mid-pipeline.
+   - Record the user's choice in `session-configuration.md` and `task.md` (`drive_sync_policy`) and apply it consistently across the rest of the session and any subsequent edits—never ask contradictory offloading questions mid-pipeline.
 
 ---
 
@@ -44,10 +44,38 @@ Instead:
 
 When the user's `drive_sync_policy` includes uploading to Google Drive, use the `gdrive` skill (`~/.gemini/config/plugins/gdrive/skills/gdrive/SKILL.md`). Never configure a third-party Google Drive MCP server in `mcp_config.json`.
 
+### 0. Target Google Drive Path Prompting & User Superiority Rule
+
+Before uploading or saving any file to Google Drive, the Main Orchestrator MUST invoke `ask_question` to suggest a destination path and allow the user to provide custom guidance:
+
+1. **Suggest a Path via `ask_question`**:
+   - Suggest a sensible default path: e.g. `(Recommended) Colab Notebooks/<NotebookName>.ipynb`.
+   - Provide alternative project structure options while inviting the user to provide hints, a subfolder, or a full custom path.
+   - Example prompt:
+     ```python
+     ask_question(
+         questions=[{
+             "question": "Where on Google Drive would you like to save '<NotebookName>.ipynb'?",
+             "options": [
+                 "(Recommended) Colab Notebooks/<NotebookName>.ipynb",
+                 "Colab Notebooks/Projects/<NotebookName>.ipynb",
+             ]
+         }]
+     )
+     ```
+
+2. **Absolute User Superiority Rule**:
+   - **What the user says is strictly superior to what the orchestrator suggests.**
+   - If the user provides a custom path, hint, or folder name, the Orchestrator MUST prioritize and honor the user's input above any default or suggestion.
+   - **Full Path**: If the user enters a full path (e.g. `My Drive/Research/Experiments/Model.ipynb`), parse the folder hierarchy, locate the folder via `gdrive search`, create any missing directories via `gdrive mutate create-folder`, and save the notebook under that exact location.
+   - **Hints or Keywords**: If the user gives a hint or keywords (e.g. "put it in my thesis folder" or "save to financial_models"), search Google Drive for matching folders (`gdrive search "name contains '<hint>' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"`) and upload to the matched folder.
+   - **Subfolder**: If the user specifies a subfolder (e.g. `Colab Notebooks/DeepLearning`), resolve or create the subfolder inside `Colab Notebooks`.
+   - The default `Colab Notebooks` root is only used if the user explicitly approves the recommended option without providing custom hints or paths.
+
 ### A. Locating the Target Folder & Checking for Name Collisions
-1. Locate the `Colab Notebooks` folder ID (or the user-specified Drive folder):
+1. Locate the confirmed target folder ID (resolved from the user's choice/hint):
    ```bash
-   gdrive search "name = 'Colab Notebooks' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+   gdrive search "name = '<Confirmed_Folder_Name>' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
    ```
 2. **Check for Existing File With the Same Name Before Uploading**:
    - Query the target folder to see if `<NotebookName>.ipynb` already exists:
@@ -61,7 +89,7 @@ When the user's `drive_sync_policy` includes uploading to Google Drive, use the 
   ```bash
   gdrive mutate upload "<local_ipynb_path>" --mime-type "application/vnd.google.colaboratory" --parent <FOLDER_ID>
   ```
-  Record the returned `<FILE_ID>` and `modifiedTime` in `task.md`.
+  Record the returned `<FILE_ID>` and `modifiedTime` in `task.md` and `session-configuration.md`.
 - **Subsequent Edits in the Same Session**:
   - Before running `mutate update`, optionally verify `gdrive info <FILE_ID>` to ensure the file's remote `modifiedTime` has not advanced due to concurrent manual edits by the user in Google Colab. If the user edited the file concurrently in Drive, re-fetch `get_cells(includeOutputs=False)` first so their manual changes are preserved before exporting and updating:
     ```bash

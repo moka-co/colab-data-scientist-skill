@@ -15,6 +15,7 @@ def test_skill_md_conciseness_and_default_mode():
     assert "Quick Exploration" in content
     assert "Polished Deliverable" in content
     assert "CELLS_TO_EXECUTE" in content
+    assert "session-configuration.md" in content
 
 
 def test_internal_markdown_links_resolve():
@@ -66,7 +67,14 @@ def test_subagent_contracts():
     discovery_text = (REPO_ROOT / "agents" / "support" / "dataset-discovery-agent.md").read_text(
         encoding="utf-8"
     )
-    for required_field in ["License", "Size", "Last Updated", "Colab Secrets"]:
+    for required_field in [
+        "License",
+        "Size",
+        "Last Updated",
+        "Colab Secrets",
+        "Named / Well-Known Dataset Fast-Path",
+        "how to download <dataset> dataset from hugging face or kaggle",
+    ]:
         assert required_field in discovery_text, (
             f"dataset-discovery-agent.md missing required field '{required_field}'"
         )
