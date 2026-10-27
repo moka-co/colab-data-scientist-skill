@@ -27,8 +27,8 @@ The Orchestrator provides the following inputs:
 - **`intended_use`** (optional, default: `research_educational`): e.g., `commercial`, `competition`, `research_educational`.
 - **`language_or_region`** (optional): e.g., `English`, `Multilingual`, `US-only`.
 - **`runtime_constraints`** (optional): e.g., Colab free tier RAM (~12 GB), disk (~70 GB), GPU (T4 or None).
-- **`max_candidates`** (optional, default: 5): Maximum number of shortlisted candidates to present.
-- **`search_budget`** (optional, default: 10 queries, 15 page fetches): Maximum web searches and page fetches.
+- **`max_candidates`** (optional, default: 5; `1` for fast-path): Maximum number of shortlisted candidates to present.
+- **`search_budget`** (optional, default: 5 queries, 6 page fetches; `2 queries, 2 page fetches` for fast-path): Maximum web searches and page fetches.
 - **`execution_mode`** (optional, default: `standalone`): `standalone` or `pre_notebook`.
 
 **Input Validation**: If any required input (`task`, `modality`, `artifact_dir`) is missing or completely ambiguous, return immediately with Mode A (`STATUS: "NEEDS_INPUT"`).
@@ -50,16 +50,20 @@ The Orchestrator provides the following inputs:
      - Ambiguous task family that alters target availability.
    - For all other non-critical variations (e.g., dataset scale within Colab limits, minor formatting differences), **state reasonable assumptions in the report and proceed directly to search and ranking**.
 
-2. **Search Budget & Early-Stopping Rule**:
-   - Strictly adhere to `search_budget`: maximum 10 search queries and 15 page fetches.
-   - **Early Stopping**: Cease searching as soon as $\ge 3$ high-quality candidates meeting all criteria and verification checks are found. Do not waste search calls padding candidate lists.
+2. **Search Budget, Named/Well-Known Fast-Path & Early-Stopping Rule**:
+   - **Named / Well-Known Dataset Fast-Path (1–2 Queries Max)**:
+     - **Condition**: If `task` names a specific or well-known dataset (e.g., Titanic, MNIST, CIFAR-10, IMDb, SQuAD, Adult Census, Iris, California Housing, Fashion-MNIST, or a specific HuggingFace/Kaggle name or slug).
+     - **Execution**: Run a direct search query `"how to download <dataset> dataset from hugging face or kaggle"` (at most 1–2 queries and 1–2 page/API fetches total). Grab the canonical load snippet (`load_dataset(...)` or `kagglehub.dataset_download(...)`) and essential metadata. Skip multi-hub comparison, cross-hub deduplication, and alternative candidate padding — return **1 candidate** (`CANDIDATE_DATASETS` length = 1) immediately.
+   - **Open-Ended Discovery Budget & Early Stopping**:
+     - When the user asks for an open-ended domain (no specific dataset named), adhere to `search_budget`: maximum 5 search queries and 6 page fetches.
+     - **Early Stopping**: Cease searching as soon as $\ge 3$ high-quality candidates meeting all criteria and verification checks are found. Do not waste search calls padding candidate lists.
 
 3. **Multi-Source Search, API Verification & Metadata Grounding**:
-   - Search across major hubs:
+   - **Open-Ended Search Across Hubs** (skipped during Named/Well-Known Fast-Path, which queries only HuggingFace/Kaggle directly):
      - **HuggingFace Datasets** (`https://huggingface.co/datasets` / REST API `https://huggingface.co/api/datasets?search=...`)
      - **Kaggle Datasets & Competitions** (`https://www.kaggle.com/datasets`)
      - **OpenML** (`https://www.openml.org/`), **UCI ML Repository** (`https://archive.ics.uci.edu/`), **Google Dataset Search** (`https://datasetsearch.research.google.com/`), **Zenodo**, and **PapersWithCode**.
-   - **Cross-Hub Deduplication**: Many benchmark datasets (e.g., Titanic, MNIST, SQuAD, IMDb, Adult Census) exist across Kaggle, Hugging Face, UCI, and OpenML. Deduplicate these under a single canonical entry, listing alternative mirror hubs underneath.
+   - **Cross-Hub Deduplication (Open-Ended Only)**: During open-ended discovery, deduplicate benchmark datasets across hubs under a single canonical entry, listing alternative mirror hubs underneath.
    - **Per-Field Verification Status**: Never invent or hallucinate metadata. Every candidate must include verification tags (`verified: API`, `verified: page`, `verified: snippet`, or `unknown`):
      - **Exact Identifier & Verified URL**: Confirmed existence via REST API or fetch.
      - **License**: Exact license string (e.g., `CC-BY-4.0`, `MIT`, `Apache-2.0`, `CC0`, `Custom Non-Commercial`, `Competition Rules Only`, or `unknown`). Explicitly flag commercial restrictions.
