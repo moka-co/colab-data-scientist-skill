@@ -60,7 +60,7 @@ Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.
    - Run Phase 1 inspection cells (`PHASE: "INSPECT"`), ensuring it includes the mandatory extra introductory Text Cell explaining the dataset, feature meanings, sample counts, and collector/publication date. Loop back outputs via `send_message` so `eda-agent` drafts Phase 2 diagnostics (`PHASE: "VISUALIZE_AND_DIAGNOSE"`) and updates `eda-agent_tasks.md` with verified `## Findings`.
 4. **Ordered Cleaning & Leak-Free Splitting (`data-cleaning-agent`)**:
    - Pass inputs (`task_modality`, `dataframe_engine`, `artifact_dir`, `target_column`, `id_columns`, `group_column`, `intended_model_family`, `workflow_mode`).
-   - If `STATUS: "NEEDS_USER_CONFIRMATION"` is returned (e.g., dropping $> 5\%$ rows or non-trivial columns), prompt user via `ask_question` before executing.
+   - If `STATUS: "NEEDS_USER_CONFIRMATION"` is returned (e.g., dropping $> 5\%$ rows, dropping non-trivial columns, or resolving time-series timestamp gaps and their trade-offs for lag/window construction), surface the findings/trade-offs and prompt the user via `ask_question` so you can align on the strategy before executing.
    - Execute cleaning, pre-split deduplication, and Parquet checkpointing. Invoke `critic-agent` with `scope: "post_cleaning"`. If data leakage or split overlap is detected, resolve before training. Pass unfitted pipeline and clean split frames to `model-training-agent`.
 5. **Phased Model Training & Leakage Tripwire (`model-training-agent`)**:
    - Anticipate modeling dependencies during setup (or install `ADDITIONAL_PACKAGES` at the top setup cell). Note that library recommendations are strictly advisory and must be checked against what is installed.

@@ -57,7 +57,7 @@ Before drafting any cleaning cells, inspect the inputs passed by the Main Orches
    3. *Category Normalization*: Strip leading/trailing whitespace, enforce consistent casing, and map canonical typos.
    4. *Pre-Split Deduplication*: Deduplicate identical rows before splitting to prevent train/test contamination.
    5. *Domain Bounds & Units*: Validate impossible values (e.g., negative ages, percentages $> 100$) and ensure unit consistency across rows.
-   6. *Missing-Value Strategy*: Drop a column only if missingness $> 70\%$; impute median/mode or retain missingness indicators if $\le 70\%$. Never drop rows with missing values silently.
+   6. *Missing-Value Strategy & Temporal Contiguity*: Drop a column only if missingness $> 70\%$; impute median/mode or retain missingness indicators if $\le 70\%$. Never drop rows with missing values silently. For time-indexed data, omitted timestamps are *implicit* nulls invisible to `.isna()`—always inspect time-step deltas ($\Delta t$) against a regular frequency grid before imputing or creating lags.
    7. *Outliers*: Apply winsorization or domain-specific clipping rather than row deletion.
 
 2. **Per-Column Changes Reporting**:
@@ -67,13 +67,14 @@ Before drafting any cleaning cells, inspect the inputs passed by the Main Orches
    - `count_affected` (exact number of rows/values changed)
    - `fill_value_or_rule` (e.g. `median=28.5`, `bound=[0, 100]`)
 
-3. **Destructive Operations Guardrails (`NEEDS_USER_CONFIRMATION`)**:
+3. **Destructive Operations & Trade-Off Guardrails (`NEEDS_USER_CONFIRMATION`)**:
    If proposed cleaning actions meet any of the following thresholds, do NOT proceed automatically:
    - Dropping $> 5\%$ of total rows.
    - Dropping any feature column that isn't clearly a constant or unique ID.
    - Any class disappearing or dropping below minimum threshold ($< 5$ samples).
    - Dropping rows with missing target labels (modeling decision).
-   In these cases, return `STATUS: "NEEDS_USER_CONFIRMATION"` with `PROMPT` and `OPTIONS` so the Orchestrator can prompt the user via `ask_question`.
+   - **Non-trivial timestamp gaps or irregular intervals in Time Series / Temporal tasks**: Because there is no one-size-fits-all strategy for missing time steps—and row-based lag/rolling features silently break across gaps—always surface the gap profile (missing step count, gap length distribution, longest outage, and affected lag windows) and trade-offs to the Orchestrator and user.
+   In these cases, return `STATUS: "NEEDS_USER_CONFIRMATION"` with a detailed `PROMPT` (summarizing the exact counts/gaps and trade-offs) and `OPTIONS` so the Orchestrator can brainstorm or confirm the strategy with the user via `ask_question`.
 
 4. **Deduplication & Group Leakage Handled Before Splitting**:
    - Deduplicate before splitting, otherwise identical records land in both train and test partitions (a major cause of inflated NLP and CV scores).
@@ -107,7 +108,11 @@ Before drafting any cleaning cells, inspect the inputs passed by the Main Orches
    - Invariant: Assert no nulls *except* in columns explicitly designated as intentionally retaining missing values or when `intended_model_family == "gbdt"`.
    - *NLP*: Assert zero empty strings after cleaning; compute and log the percentage of tokens truncated at `max_length`; scan for PII (emails, phone numbers); preserve raw text alongside token IDs.
    - *CV*: Assert zero unreadable images; compute normalization statistics on the training set (or specify pretrained backbone expected stats); set `num_workers=2` for Colab CPU limits; use annotation-aware augmentations for bounding boxes/masks; persist label-to-index mapping.
-   - *Time Series*: Cap forward-fill length (flag filled timestamps); record invertible target transforms (log, differencing) for inference inverse-transforming.
+   - *Time Series & Temporal Lag Integrity*:
+     - **Implicit Gap Detection & Time-Grid Regularization**: Omitted timestamps are implicit nulls that `.isna()` cannot detect. Sort chronologically (per entity/group if panel data) and compare observed timestamps against a complete regular frequency grid (`date_range` / `upsample` at native step $\Delta t$) to quantify missing steps, gap duration distribution, and max outage length.
+     - **Notify Orchestrator & User on Gap Trade-Offs**: Never silently guess how to bridge non-trivial timestamp gaps. Return `STATUS: "NEEDS_USER_CONFIRMATION"` with the gap summary and clear trade-off options (e.g., *Option 1*: Reindex to regular grid, causal `ffill(limit=K)` for short gaps $\le K$ + `is_gap_imputed` flag, keep long outages as `NaN` and drop rows with incomplete lag windows; *Option 2*: Segment into contiguous gap-free sub-series before windowing; *Option 3*: Resample/aggregate to a coarser frequency or use explicit elapsed-time $\Delta t$ features instead of fixed-step lags).
+     - **Lag & Rolling Window Contiguity Invariant**: **Never apply row-based `.shift(k)` or `.rolling(w)` on an irregular or gapped timestamp index**—shifting by $k$ rows across a missing interval silently pairs misaligned time horizons (e.g., shifting 1 row across a 5-hour gap pairs `t` with `t - 5h` instead of `t - 1h`). Always regularize the time grid *before* computing lags/rolling stats (so unbridged gaps become explicit `NaN` rows that naturally invalidate cross-gap lags), or explicitly assert/mask any row where `timestamp - timestamp.shift(k) != k * delta_t`.
+     - **Causal Imputation & Invertible Transforms**: Cap forward-fill length (`ffill(limit=K)`) with an indicator flag; never use two-sided interpolation across splits or before lagging where it leaks future values. Record invertible target transforms (log, differencing) for inference inverse-transforming.
    - *Class Imbalance*: Resampling or class-reweighting must be applied strictly to the training split (`X_train`, `y_train`); never modify validation or test splits.
 
 ---

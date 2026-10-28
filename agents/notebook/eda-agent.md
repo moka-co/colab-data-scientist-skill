@@ -127,10 +127,10 @@ Using the actual column count, data types, and scale confirmed from Phase 1, ret
    - Plot a clean $3 \times 3$ or $4 \times 4$ labeled grid of sample images with titles.
 
 4. **Time Series (`time_series`)**:
-   - Inspect timestamp regularity, delta distributions, and missing datetime intervals.
+   - Inspect timestamp regularity, delta distributions ($\Delta t$), and implicit missing datetime intervals (comparing observed timestamps against a complete expected `date_range` grid to report total missing steps, gap duration distribution, longest outage, and how gaps will affect downstream lag/rolling features).
    - **Panel Structure Detection**: Check whether multiple series/entities exist (e.g., `item_id`, `store_id`).
    - Plot the target series over time and run autocorrelation (ACF/PACF).
-   - **Downstream Rule**: Explicitly note in findings that downstream splitting MUST be temporal (strictly chronological, no random shuffle).
+   - **Downstream Rule**: Explicitly note in findings that downstream splitting MUST be temporal (strictly chronological, no random shuffle) and flag any timestamp gaps so `data-cleaning-agent` and the Orchestrator can discuss gap-handling trade-offs with the user before lag creation.
 
 5. **Reinforcement Learning (`rl`)**:
    - Inspect `observation_space` (box bounds/shapes, discrete dims) and `action_space`.
