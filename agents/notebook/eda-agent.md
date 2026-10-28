@@ -72,8 +72,15 @@ Return a focused batch of inspection cells:
      - PySpark: `raw_sdf`
      - HuggingFace: `raw_dataset`
    - All exploratory derived columns or temporary transformations MUST be created on an explicit copy (`eda_df = raw_df.copy()` or engine equivalent).
-4. **Core Schema & Shape Print**:
+4. **Core Schema, Shape & Mandatory Numeric Summary Statistics**:
    - Print exact shape, column names, data types, null/missing counts, and 3–5 representative sample rows.
+   - **Mandatory Numeric Summary Statistics**: If the dataset contains numeric features or has a numeric prediction objective (e.g., continuous target, hourly hours, counts, prices, durations):
+     - ALWAYS compute and display basic descriptive summary statistics: count, mean, standard deviation, min, 25%, median (50%), 75%, max, along with zero counts and negative value checks.
+     - Use engine-idiomatic calls:
+       - Pandas: `eda_df.describe().T`
+       - Polars: `eda_df.select(cs.numeric()).describe()` (or `eda_df.describe()`)
+       - DuckDB: `SUMMARIZE raw_view`
+       - PySpark: `raw_sdf.describe().show()`
    - For lazy engines (DuckDB, PySpark): use native idioms (`COUNT(*)`, schema descriptions); never call `.memory_usage()`.
 
 Return these cells under `PHASE: "INSPECT"`. The Orchestrator will execute them and return the live stdout via `send_message`.
@@ -89,9 +96,11 @@ Using the actual column count, data types, and scale confirmed from Phase 1, ret
    - **Scale Caps on Visualizations**:
      - Never plot correlation heatmaps on `> 20` features. Select the top $K \le 20$ numerical features by variance or target correlation.
      - For scatter matrix / pairplots: downsample rows to $N \le 10{,}000$ to avoid rendering timeouts.
-   - **Target Analysis (Supervised only)**:
-     - For regression: compute target skewness (flag if $|skew| > 1.5$) and extreme target outliers.
-     - For classification: compute class balance ratios (flag minority class if $< 10\%$).
+    - **Target Analysis (Supervised only)**:
+      - For regression / numeric objectives (e.g., continuous targets, hourly hours, demand):
+        - Compute target skewness (flag if $|skew| > 1.5$) and extreme target outliers.
+        - Compute distribution percentiles (p1, p5, p50, p95, p99), mean-to-median ratio, and zero/negative value percentages.
+      - For classification: compute class balance ratios (flag minority class if $< 10\%$).
    - **Zero Leakage Rule**:
      - If splits already exist, compute target-feature correlations and predictive checks strictly on the `train` split.
      - If no split exists yet, clearly label target-aware statistics as *"full-data, exploratory"* and warn downstream agents that feature selection must be fit strictly on the training partition (using standard markdown `> **Warning (Target Leakage Prohibition Invariant):** ...`, never unsupported `> [!WARNING]`).
