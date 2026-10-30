@@ -77,6 +77,7 @@ Before drafting any cells, inspect the inputs passed by the Main Orchestrator:
      - Apply deterministic evaluation transforms (resize, crop, normalization).
      - For detection/segmentation: apply confidence score thresholds and Non-Maximum Suppression (NMS).
    - **Time Series (`time_series`)**:
+     - For library models (`StatsForecast`, `NeuralForecast`, `darts`, `prophet`): call native prediction methods (`sf.predict(h=...)`, `nf.predict()`, `model.predict(n=...)`) respecting context windows and forecast horizons.
      - Enforce context window and forecast horizon alignment; handle future known covariates versus auto-regressive recursive predictions.
    - **Reinforcement Learning (`rl`)**:
      - Evaluate trained policy deterministically (`action, _ = model.predict(obs, deterministic=True)`).

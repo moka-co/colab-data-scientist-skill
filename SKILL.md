@@ -47,9 +47,10 @@ Before starting a new notebook pipeline (or after dataset selection via `dataset
 
 ### 2. Colab Connection, Iterative Subagent Execution & Error Recovery
 Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) when connecting to Colab or handling errors. For each required phase in `task.md`:
-1. **Line-Range Library Lookup (Optional Advisory Tips)**:
+1. **Line-Range Library Lookup & Mandatory Library-First Policy**:
    - Never read all of [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md). Read only its **Section-to-Line Index Map** (lines 35–68), then call `view_file` with `StartLine` and `EndLine` for the relevant domain section.
-   - Inject **at most 5 advisory library tips** (name + `pip` package only), filtered by `Engine Compatibility` (`polars` / `pandas` / `both`). Priority hierarchy: **User preference > Colab Runtime constraints > Orchestrator suggestions**.
+   - **Library-First Rule**: Models MUST use established open-source libraries (e.g., `statsforecast` / `neuralforecast` for time series, `lightgbm`/`xgboost`/`scikit-learn` for tabular, `timm` for CV); never hand-roll model architectures or forecasting math from scratch.
+   - Inject **at most 5 library tips** (name + `pip` package only), filtered by `Engine Compatibility`. Priority hierarchy: **User preference > Colab Runtime constraints > Orchestrator suggestions**.
 2. **Two-Step Environment Setup Loop (`env-setup-agent`)**:
    - **Default Assumption**: Assume Colab pre-installs relevant libraries by default; only check for missing packages (unless importing a repo with specific required dependencies).
    - **Step 1 (Probe)**: Invoke `env-setup-agent` to receive its minimal probe cell (`!pip list` under `STEP: "PROBE"`). Execute in Colab and send stdout back via `send_message`.
@@ -63,7 +64,7 @@ Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.
    - If `STATUS: "NEEDS_USER_CONFIRMATION"` is returned (e.g., dropping $> 5\%$ rows or non-trivial columns), prompt user via `ask_question` before executing.
    - Execute cleaning, pre-split deduplication, and Parquet checkpointing. Invoke `critic-agent` with `scope: "post_cleaning"`. If data leakage or split overlap is detected, resolve before training. Pass unfitted pipeline and clean split frames to `model-training-agent`.
 5. **Phased Model Training & Leakage Tripwire (`model-training-agent`)**:
-   - Anticipate modeling dependencies during setup (or install `ADDITIONAL_PACKAGES` at the top setup cell). Note that library recommendations are strictly advisory and must be checked against what is installed.
+   - Mandate battle-tested domain libraries (e.g., `statsforecast`, `neuralforecast`, `darts` for time series; `lightgbm`, `scikit-learn` for tabular)—strictly forbid custom from-scratch model implementations. Anticipate modeling dependencies during setup (install `ADDITIONAL_PACKAGES` at the top setup cell).
    - Execute Phase 1 (`PHASE: "BASELINE"`), capture validation score and `%%time` duration. Invoke `critic-agent` with `scope: "post_baseline"`. If metric triggers the "too good" tripwire (`STATUS: "SUSPECTED_LEAKAGE"`), halt and route back to EDA/cleaning. Otherwise, loop back via `send_message`.
    - Execute Phase 2 (`PHASE: "CANDIDATES_AND_TUNING"`) within the compute budget.
    - Pass the verified `SELECTED_MODEL` payload (full fitted pipeline, feature order, label mapping, decision threshold, load snippet) directly to `inference-agent`.
@@ -75,9 +76,9 @@ Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.
 
 ### 3. Multi-Gate Critic Audits (`critic-agent`)
 - Reused across 3 gates (`post_cleaning`, `post_baseline`, `final`). For each gate, pass `scope`, cells, truncated outputs (head/tail/signals, with images stripped to `[PLOT_RENDERED: ...]`), active `workflow_mode`, and relevant task files.
-- **Objective Fact-Checking**: Objectively fact-checks any dataset information, sample counts, and feature definitions found in the notebook against actual code execution outputs without author bias.
+- **Objective Fact-Checking & Implementation Integrity**: Fact-checks dataset claims against outputs; verifies models use established libraries (rejects hand-rolled/DIY implementations).
 - **Apply `SAFE_AUTO_FIXES` Automatically**: Fast (`< 5s`), non-destructive leaf/display fixes (e.g., plot labels, formatting, printing already-computed metrics, summary markdown).
-- **Confirm `ESCALATED_FIXES` With User First**: Never auto-apply changes to **model training cells** or **upstream data-mutating cells** (data leakage, split contamination, metric tripwires). Present `ESCALATED_FIXES` via `ask_question` first.
+- **Confirm `ESCALATED_FIXES` With User First**: Never auto-apply changes to **model training cells** or **upstream data-mutating cells** (data leakage, split contamination, metric tripwires, hand-rolled model replacements). Present `ESCALATED_FIXES` via `ask_question` first.
 
 ### 4. Notebook Export & Google Drive Sync
 - When ready to export and sync, read and follow [`references/drive-sync-and-export.md`](references/drive-sync-and-export.md) to assemble the `.ipynb` via `scripts/export_to_ipynb.py`.
