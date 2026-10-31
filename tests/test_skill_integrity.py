@@ -1,7 +1,12 @@
 """Integrity tests for markdown links, line-index maps, and subagent contracts."""
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -44,30 +49,48 @@ def test_internal_markdown_links_resolve():
             )
 
 
-def test_subagent_contracts():
-    """Verify notebook subagents define CELLS_TO_EXECUTE and critic defines fix tiers."""
-    notebook_agents = [
-        "env-setup-agent.md",
-        "eda-agent.md",
-        "data-cleaning-agent.md",
-        "model-training-agent.md",
-        "inference-agent.md",
-    ]
-    for name in notebook_agents:
-        path = REPO_ROOT / "agents" / "notebook" / name
-        text = path.read_text(encoding="utf-8")
-        assert "CELLS_TO_EXECUTE" in text, f"{name} missing CELLS_TO_EXECUTE contract"
+def test_notebook_subagent_directory_layout():
+    """Ensure agents/notebook/ contains only data-pipeline/ and model-training-evaluation/ specs."""
+    nb_root = REPO_ROOT / "agents" / "notebook"
+    loose_md = list(nb_root.glob("*.md"))
+    assert loose_md == [], f"Found ungrouped .md files in agents/notebook/: {loose_md}"
 
-    critic_text = (REPO_ROOT / "agents" / "notebook" / "critic-agent.md").read_text(
-        encoding="utf-8"
-    )
+
+def test_subagent_contracts():
+    """Verify notebook subagents define CELLS_TO_EXECUTE and critic defines scopes & fix tiers."""
+    execution_agents = [
+        ("data-pipeline", "env-setup-agent.md"),
+        ("data-pipeline", "data-cleaning-agent.md"),
+        ("data-pipeline", "eda-agent.md"),
+        ("model-training-evaluation", "model-training-agent.md"),
+        ("model-training-evaluation", "inference-agent.md"),
+        ("model-training-evaluation", "report-writer-agent.md"),
+    ]
+    for group, name in execution_agents:
+        path = REPO_ROOT / "agents" / "notebook" / group / name
+        text = path.read_text(encoding="utf-8")
+        assert "CELLS_TO_EXECUTE" in text, f"{group}/{name} missing CELLS_TO_EXECUTE contract"
+        assert "`enable_mcp_tools`: `false`" in text or "**enable_mcp_tools**: `false`" in text
+        assert (
+            "`enable_subagent_tools`: `false`" in text
+            or "**enable_subagent_tools**: `false`" in text
+        )
+
+    critic_text = (
+        REPO_ROOT / "agents" / "notebook" / "model-training-evaluation" / "critic-agent.md"
+    ).read_text(encoding="utf-8")
     assert "SAFE_AUTO_FIXES" in critic_text
     assert "ESCALATED_FIXES" in critic_text
+<<<<<<< HEAD
     cleaning_text = (REPO_ROOT / "agents" / "notebook" / "data-cleaning-agent.md").read_text(
         encoding="utf-8"
     )
     assert "Lag & Rolling Window Contiguity Invariant" in cleaning_text
     assert "Implicit Gap Detection & Time-Grid Regularization" in cleaning_text
+=======
+    assert "post_pipeline" in critic_text
+    assert "post_cleaning" not in critic_text
+>>>>>>> dev
 
     discovery_text = (REPO_ROOT / "agents" / "support" / "dataset-discovery-agent.md").read_text(
         encoding="utf-8"
@@ -83,6 +106,30 @@ def test_subagent_contracts():
         assert required_field in discovery_text, (
             f"dataset-discovery-agent.md missing required field '{required_field}'"
         )
+
+
+def test_report_writer_agent_contract():
+    """Verify report-writer-agent enforces source-of-truth, orchestrator, and best practices."""
+    rw_path = (
+        REPO_ROOT / "agents" / "notebook" / "model-training-evaluation" / "report-writer-agent.md"
+    )
+    text = rw_path.read_text(encoding="utf-8")
+    for required in [
+        "../../../best-practices/notebook-best-practices.md",
+        "../../../best-practices/data-science-libraries.md",
+        "## Results & Debrief",
+        "ORCHESTRATOR_SUMMARY",
+        "REPORT_PATH",
+        "source of truth",
+        "Missing information",
+    ]:
+        assert required in text, f"report-writer-agent.md missing '{required}'"
+
+    # Verify the ## Results & Debrief template block uses bullets (-), not numbered lists (1.)
+    template_part = text.rsplit("\n## Results & Debrief\n", 1)[1].split("```", 1)[0]
+    assert "\n1. " not in template_part, (
+        "## Results & Debrief template must use '-' bullets per notebook-best-practices.md"
+    )
 
 
 def test_data_science_libraries_line_map():
@@ -126,3 +173,91 @@ def test_no_hardcoded_user_paths():
         assert "Users\\tech" not in content and "Users/tech" not in content, (
             f"Hardcoded user path found in {path.relative_to(REPO_ROOT)}"
         )
+
+
+def test_group1_data_pipeline_agents():
+    """Verify Group 1 data-pipeline layout and extract->clean->transform->analyze contracts."""
+    dp_dir = REPO_ROOT / "agents" / "notebook" / "data-pipeline"
+    for name in ["env-setup-agent.md", "data-cleaning-agent.md", "eda-agent.md"]:
+        path = dp_dir / name
+        assert path.exists(), f"Missing Group 1 subagent spec: {path}"
+        assert not (REPO_ROOT / "agents" / "notebook" / name).exists(), (
+            f"Stale root subagent file still exists: agents/notebook/{name}"
+        )
+        text = path.read_text(encoding="utf-8")
+        assert "CELLS_TO_EXECUTE" in text, f"{name} missing CELLS_TO_EXECUTE"
+        assert "(../../best-practices/" not in text, f"{name} has shallow relative link"
+        assert "(../../../best-practices/" in text, f"{name} missing 3-level relative link"
+
+    cleaning_text = (dp_dir / "data-cleaning-agent.md").read_text(encoding="utf-8")
+    for token in [
+        'PHASE: "EXTRACT"',
+        'PHASE: "CLEAN_AND_TRANSFORM"',
+        "extract_data",
+        "clean_data",
+        "transform_data",
+        "unfitted_pipeline",
+        "scripts/pipeline_",
+    ]:
+        assert token in cleaning_text, f"data-cleaning-agent.md missing '{token}'"
+
+    eda_text = (dp_dir / "eda-agent.md").read_text(encoding="utf-8")
+    for token in [
+        'PHASE: "ANALYZE_AND_PLOT"',
+        "Findings & Modeling Recommendations",
+        "Column | Type | Domain Context | Meaning",
+    ]:
+        assert token in eda_text, f"eda-agent.md missing '{token}'"
+
+
+def test_two_group_pipeline_and_gate_consistency():
+    """Ensure SKILL.md, README.md, best-practices, and references reflect the 2-group pipeline."""
+    skill_text = (REPO_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    for required in [
+        "agents/notebook/data-pipeline/",
+        "agents/notebook/model-training-evaluation/",
+        "report-writer-agent",
+        "post_pipeline",
+        "DATA_PIPELINE_HANDOFF",
+    ]:
+        assert required in skill_text, f"SKILL.md missing '{required}'"
+
+    docs_to_check = [
+        REPO_ROOT / "SKILL.md",
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "best-practices" / "notebook-best-practices.md",
+        *(REPO_ROOT / "references").glob("*.md"),
+        *(REPO_ROOT / "agents").rglob("*.md"),
+    ]
+    for doc in docs_to_check:
+        text = doc.read_text(encoding="utf-8")
+        assert "post_cleaning" not in text, (
+            f"Stale 'post_cleaning' gate found in {doc.relative_to(REPO_ROOT)}"
+        )
+
+
+def test_python_files_pass_ruff_format_check():
+    """Ensure all Python files pass ruff format --check so CI does not fail."""
+    ruff_bin = shutil.which("ruff")
+    if ruff_bin:
+        cmd = [ruff_bin, "format", "--check", "."]
+    else:
+        uvx_bin = shutil.which("uvx")
+        if not uvx_bin and os.environ.get("APPDATA"):
+            candidates = sorted(Path(os.environ["APPDATA"]).glob("Python/*/Scripts/uvx.exe"))
+            if candidates:
+                uvx_bin = str(candidates[0])
+        if not uvx_bin:
+            pytest.skip("Neither ruff nor uvx is installed")
+        cmd = [uvx_bin, "ruff", "format", "--check", "."]
+
+    proc = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, f"ruff format --check failed:\n{proc.stdout}\n{proc.stderr}"
+
+
+def test_ci_workflow_includes_nbformat_test_dependency():
+    """Ensure CI runs pytest with nbformat installed so notebook validation tests never skip."""
+    ci_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "nbformat" in ci_text or "--extra dev" in ci_text, (
+        ".github/workflows/ci.yml must install nbformat (or dev extras) when running pytest"
+    )

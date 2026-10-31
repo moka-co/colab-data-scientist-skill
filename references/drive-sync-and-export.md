@@ -2,7 +2,7 @@
 
 This reference document defines the exact procedures for assembling clean `.ipynb` files (preserving cell outputs without WebSocket truncation) and synchronizing artifacts to Google Drive with explicit, once-per-session user consent.
 
-The Main Orchestrator reads this file when reaching the final export and Google Drive sync step.
+The Main Orchestrator reads this file when reaching the final export and Google Drive sync step (either after `Group 1: Data Pipeline` on `data_pipeline_only` runs, or after `report-writer-agent` completes `Group 2: Model Selection & Evaluation`).
 
 ---
 
@@ -13,8 +13,8 @@ Uploading files to a user's Google Drive modifies their cloud account and may in
 1. **Ask Once Per Session (`ask_question`)**:
    - If the user did not already state their Google Drive preference in their initial prompt (or during Step 1 session setup), ask **once** before the first export/sync:
      - `(Recommended) Sync the .ipynb notebook only to Google Drive (Colab Notebooks)`
-     - `Sync the .ipynb notebook, modular scripts (scripts/), and logs (DATA_CLEANING_LOG.md)`
-     - `Sync everything (notebook, scripts, logs, and data/intermediate/* checkpoints)`
+     - `Sync the .ipynb notebook, standalone report (report.md), modular pipeline scripts (scripts/pipeline_*.py), and logs (DATA_CLEANING_LOG.md)`
+     - `Sync everything (notebook, report.md, pipeline scripts, logs, and Parquet/model checkpoints)`
      - `Keep local only (export .ipynb locally without uploading to Google Drive)`
 2. **Remember & Honor the Choice**:
    - Record the user's choice in `session-configuration.md` and `task.md` (`drive_sync_policy`) and apply it consistently across the rest of the session and any subsequent edits—never ask contradictory offloading questions mid-pipeline.
@@ -97,4 +97,4 @@ Before uploading or saving any file to Google Drive, the Main Orchestrator MUST 
     ```
 
 ### C. Syncing Optional Companion Artifacts (When Requested by User's Sync Policy)
-- If the user selected syncing scripts/logs or intermediate checkpoints (`Polished Deliverable` mode), upload `DATA_CLEANING_LOG.md`, `scripts/clean_*.py`, and/or `data/intermediate/*` into a dedicated subfolder (`<NotebookName>_artifacts`) inside `Colab Notebooks` so the root `Colab Notebooks` folder stays clean.
+- If the user selected syncing reports/scripts/logs or intermediate checkpoints, upload `report.md`, `DATA_CLEANING_LOG.md`, `scripts/pipeline_*.py`, and/or Parquet/model checkpoints into a dedicated subfolder (`<NotebookName>_artifacts`) inside the confirmed Drive destination so the notebook directory stays clean.

@@ -1,6 +1,6 @@
 # Colab MCP Execution, Existing Notebooks & Failure Recovery Reference
 
-This reference document defines the operational mechanics for managing Google Colab sessions via `colab-mcp`, handling existing notebooks, and recovering from runtime errors, disconnects, kernel restarts, and out-of-memory (OOM) failures.
+This reference document defines the operational mechanics for managing Google Colab sessions via `colab-mcp`, handling existing notebooks across the two workflow phase groups, and recovering from runtime errors, disconnects, kernel restarts, and out-of-memory (OOM) failures.
 
 The Main Orchestrator reads this file when connecting to Colab, opening an existing notebook, or handling runtime execution issues.
 
@@ -27,17 +27,17 @@ The Main Orchestrator reads this file when connecting to Colab, opening an exist
 
 When the user asks to edit, debug, extend, or run an **existing** notebook (rather than creating one from scratch):
 
-1. **Inventory Current State First**:
+1. **Inventory Current State Across Both Phase Groups First**:
    - Call `get_cells(includeOutputs=False)` to inspect all existing Markdown and Code cells, their `cellId`s, and their `execution_count`s.
    - Identify:
      - Which packages and imports are already present.
      - Which dataframe engine (`pandas`, `polars`, `duckdb`, `pyspark`) or deep learning framework (`torch`, `tensorflow`, `jax`) the notebook already uses — adopt the existing notebook's engine/style automatically unless the user asks to change it.
-     - Which phases are already complete (e.g., environment setup, data loading, EDA, cleaning, or model training).
+     - Which phases of **Group 1: Data Pipeline** (`env-setup`, `extract/clean/transform`, `analyze/plot`) and **Group 2: Model Selection & Evaluation** (`model-training`, `inference`, `critic`, `report-writer`) are already complete.
 2. **Do Not Blindly Prepend All Phases**:
-   - Skip completed phases. Do **not** run `env-setup-agent` at the top if imports and installs are already present and working.
-   - Only invoke the specialist subagent(s) needed for the user's specific request (e.g., adding a new model via `model-training-agent`, fixing a bug in a specific cell, or running `inference-agent` on an already-trained model).
+   - Skip completed phases. If Group 1 is already complete (in memory or persisted as `train.parquet`/`val.parquet`/`test.parquet` + serialized pipeline objects), enter directly at **Group 2 (`model_evaluation_resume`)** rather than re-running `env-setup`, `data-cleaning`, or `eda`.
+   - Only invoke the specialist subagent(s) needed for the user's specific request (e.g., adding a candidate model via `model-training-agent`, running `inference-agent` on an already-trained model, or generating `## Results & Debrief` via `report-writer-agent`).
 3. **Verify In-Memory Kernel State Before Appending Downstream Cells**:
-   - If the existing notebook has code cells with `execution_count: null` (or if the kernel was recently restarted), run the necessary upstream cells sequentially via `run_code_cell` so required variables (`df`, `X_train`, `trained_model`) exist in memory before running new downstream cells.
+   - If the existing notebook has code cells with `execution_count: null` (or if the kernel was recently restarted), reload persisted Group 1 Parquet/model checkpoints if available, or run the necessary upstream cells sequentially via `run_code_cell` so required variables exist in memory before running new downstream cells.
 
 ---
 
@@ -50,9 +50,9 @@ Subagents do not have direct access to `colab-mcp`. To ensure subagents can reac
 2. **Execute & Observe**:
    - The Orchestrator adds (`add_text_cell` / `add_code_cell`) and executes (`run_code_cell`) the cells in Colab, capturing stdout, stderr, warnings, and return values.
 3. **Loop Back When Needed (`send_message`)**:
-   - **On Execution Error or Surprising Output**: If a cell raises an exception, reveals unexpected data anomalies (e.g., corrupted columns, unexpected date formats, class collapse), or produces broken plots, the Orchestrator sends the exact traceback/output back to the same subagent conversation ID via `send_message` (up to **2 retries**).
+   - **On Execution Error or Surprising Output**: If a cell raises an exception, reveals unexpected data anomalies, or produces broken plots, the Orchestrator sends the exact traceback/output back to the same subagent conversation ID via `send_message` (up to **2 retries**).
    - The subagent diagnoses the live output and returns replacement code for the affected cell(s), which the Orchestrator applies via `update_cell` + `run_code_cell`.
-   - **Pass Live Outputs Forward**: Once a phase succeeds, the Orchestrator passes the actual execution outputs (e.g., printed schema, missingness counts, baseline metrics, trained variable names) into the prompt of the *next* phase's subagent.
+   - **Pass Live Outputs Forward**: Executed notebook `cells` and live `outputs` are the authoritative source of truth passed forward across Group 1 (`DATA_PIPELINE_HANDOFF`) and Group 2 (culminating in `critic-agent` and `report-writer-agent`).
 
 ---
 
@@ -74,10 +74,10 @@ When `env-setup-agent` installs or upgrades packages that replace pre-installed 
 If Colab's VM resets or disconnects mid-workflow, wiping in-memory variables:
 1. Reconnect via `open_colab_browser_connection`.
 2. Re-run the environment setup / import cell(s).
-3. **Resume from Checkpoints When Available**:
-   - Check if intermediate dataset checkpoints (`data/intermediate/*`) or saved model checkpoints exist on local disk or mounted Google Drive.
-   - If checkpoints exist, load the latest checkpoint directly instead of re-running expensive upstream data cleaning or training cells.
-   - If no checkpoints exist (e.g., in `Quick Exploration` mode), re-run the upstream cells in order (`run_code_cell`).
+3. **Resume Across the Group 1 Checkpoint Boundary When Available**:
+   - If the reset occurred during **Group 2**, check if Group 1's Parquet split checkpoints (`train.parquet`, `val.parquet`, `test.parquet`), serialized preprocessing pipelines, or saved model checkpoints exist on disk or mounted Google Drive.
+   - Load those checkpoints directly instead of re-running Group 1 (`extract` $\rightarrow$ `clean` $\rightarrow$ `transform` $\rightarrow$ `analyze/plot`) or completed training loops from scratch.
+   - If checkpoints were wiped along with an ephemeral VM, re-run the upstream cells sequentially (`run_code_cell`).
 
 ### D. Out-of-Memory (CPU RAM or GPU VRAM) & Quota Exhaustion
 If a cell fails with `torch.cuda.OutOfMemoryError`, `MemoryError`, or a kernel crash (exit code `137` / `SIGKILL`):

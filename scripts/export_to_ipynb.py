@@ -250,8 +250,7 @@ def validate_notebook(notebook: dict) -> None:
                         )
                     if "data" not in out or not isinstance(out["data"], dict):
                         raise ValueError(
-                            f"Cell {idx} output {out_idx} ({ot}) "
-                            "missing required property: 'data'"
+                            f"Cell {idx} output {out_idx} ({ot}) missing required property: 'data'"
                         )
                 elif ot == "stream":
                     if "name" not in out or "text" not in out:
