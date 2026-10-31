@@ -42,6 +42,28 @@ Before drafting any cells, inspect the inputs passed by the Main Orchestrator:
 
 ---
 
+### Mandatory Library-First Principle: Never Implement Models from Scratch
+
+You MUST use established, community-vetted, high-performance open-source libraries that already implement the target models:
+- **Strictly Prohibited**: Never hand-roll, code from scratch, or "DIY" statistical or machine learning models (e.g. manual ARIMA difference equations, naive recurrence loops, custom forecasting math, or raw PyTorch neural implementations of standard architectures). Hand-rolled models introduce numerical instability, catastrophic algorithmic errors, lack standard `.predict()` / pipeline APIs, and cause silent failure.
+- **Always Use Battle-Tested Libraries**: Always declare non-preinstalled modeling libraries in `ADDITIONAL_PACKAGES` so they are installed in the notebook setup cell.
+- **Modality-Specific Library Mandates**:
+  - **Time Series (`time_series`)**:
+    - **Statistical Fast Baselines & Models**: Use **`statsforecast`** (`from statsforecast import StatsForecast; from statsforecast.models import AutoARIMA, AutoETS, AutoTheta, SeasonalNaive, HistoricAverage`). C-accelerated, robust, and handles exogenous features and intervals out-of-the-box. Alternatively use **`pmdarima`** / **`statsmodels`**.
+    - **Neural / Deep Learning**: Use **`neuralforecast`** (`from neuralforecast import NeuralForecast; from neuralforecast.models import NHITS, NBEATS, PatchTST, TimesNet`) or **`pytorch-forecasting`** (`TemporalFusionTransformer`).
+    - **Unified Frameworks**: Use **`darts`** (`from darts.models import ARIMA, ExponentialSmoothing, NBEATSModel, TCNModel`) for a scikit-learn style unified interface across statistical and neural models.
+    - **Additive / Trend & Seasonality**: Use **`prophet`** (`from prophet import Prophet`).
+    - **Foundation Models**: Use **`chronos-forecasting`** or **`timesfm`** for zero-shot forecasting.
+  - **Tabular (`tabular`)**: Use **`lightgbm`** (`LGBMClassifier`, `LGBMRegressor`), **`xgboost`** (`XGBClassifier`, `XGBRegressor`), **`catboost`** (`CatBoostClassifier`, `CatBoostRegressor`), or **`scikit-learn`** (`HistGradientBoostingClassifier`, `RandomForestClassifier`, `LogisticRegression`). Never write manual tree or boosting algorithms.
+  - **NLP & LLM (`nlp_llm`)**: Use **`transformers`**, **`peft`**, **`unsloth`**, **`sentence-transformers`**, or **`scikit-learn`**. Never hand-roll tokenizers, self-attention mechanisms, or language model backbones.
+  - **Computer Vision (`cv`)**: Use **`timm`**, **`torchvision.models`**, or Hugging Face Transformers. Never hand-roll raw CNN/ResNet/ViT backbone architectures.
+  - **Anomaly Detection**: Use **`pyod`** (e.g., `IForest`, `COPOD`, `ECOD`), **`salesforce-merlion`**, or `scikit-learn` (`IsolationForest`).
+  - **Clustering / Unsupervised**: Use **`scikit-learn`**, **`hdbscan`**, or **`tslearn`**.
+  - **Survival Analysis**: Use **`lifelines`** or **`sksurv`**.
+  - **Causal Inference**: Use **`dowhy`**, **`econml`**, or **`causalml`**.
+
+---
+
 ### Core Operational Workflow: Two-Phase Training & Retry Policy
 
 Never plan complex candidate models or heavy tuning before seeing baseline performance and hardware execution speed. You must operate in two sequential phases:
@@ -134,6 +156,7 @@ Never export isolated estimator objects or raw variable names that fail during i
    - *GPU Sizing*: Set batch size deliberately based on GPU VRAM (e.g. 16 or 32 on T4 GPU) to prevent OOM.
    - *Imbalance & Transforms*: Use class-weighted cross-entropy for imbalanced classes. Apply augmentations strictly to `train_loader`; keep validation deterministic.
 4. **Time Series (`time_series`)**:
+   - *Library Mandate*: Always use dedicated forecasting libraries: `statsforecast` for ultra-fast AutoARIMA/AutoETS/baselines, `neuralforecast` for deep architectures (NHITS/N-BEATS/PatchTST), `darts` for unified workflows, or `prophet` for strong seasonalities. Never implement manual autoregression or custom time-series loops from scratch.
    - *Causal Evaluation*: Train models only on historical windows; evaluate strictly on forward horizon.
    - *Visualizations*: Historical + Forecast vs. Actual overlay with confidence intervals, plus residual autocorrelation checks.
 5. **Reinforcement Learning (`rl`)**:

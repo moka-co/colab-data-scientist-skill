@@ -75,8 +75,9 @@ Audit the notebook immediately after `data-cleaning-agent` has executed:
 
 #### 2. Scope: `post_baseline` Gate
 Audit the notebook after `model-training-agent` executes Phase 1 (`PHASE: "BASELINE"`):
-- **Sensible Baseline Choice**:
-  - Was a true baseline fitted (e.g., dummy/logistic/linear regression for tabular, majority class / frozen embedding for NLP, simple heuristic)?
+- **Sensible Baseline Choice & Library-First Verification**:
+  - Was a true baseline fitted using established, battle-tested libraries (e.g., `statsforecast`'s `SeasonalNaive`/`HistoricAverage`/`AutoARIMA` for time series, `scikit-learn` for tabular/text baselines, `timm` for CV)?
+  - **Zero Hand-Rolled / DIY Models**: Verify that the baseline model was NOT implemented from scratch using custom loops, manual difference equations, or raw ad-hoc mathematical code. If a hand-rolled model is detected where an established library exists, fail the gate with `ESCALATED_FIXES` demanding replacement with the standard library implementation (e.g. `statsforecast`, `neuralforecast`, `darts`).
 - **Metric Sanity & The "Too Good" Tripwire**:
   - Examine baseline validation score. If an implausibly high score is observed on complex real-world data (e.g., validation ROC-AUC $> 0.995$, $R^2 > 0.999$, zero loss on step 1), trigger **`STATUS: "SUSPECTED_LEAKAGE"`** and escalate back to data cleaning to investigate target leakage or duplicate contamination.
 - **Runtime & Compute Sanity**:
@@ -84,6 +85,8 @@ Audit the notebook after `model-training-agent` executes Phase 1 (`PHASE: "BASEL
 
 #### 3. Scope: `final` Gate
 Audit the completed notebook after inference and model training are finished:
+- **Model Implementation Integrity**:
+  - Confirm candidate models use mature, community-vetted open-source libraries (`statsforecast`, `neuralforecast`, `darts`, `lightgbm`, `xgboost`, `scikit-learn`, `transformers`, etc.). Flag any custom, hand-rolled model implementations as `ESCALATED_FIXES`.
 - **Workflow Mode Compliance**:
   - **Universal Rules (`quick` and `polished`)**: Clean execution order, random seeds set (`SEED = 42`), credentials via `google.colab.userdata`, clean Colab-supported Markdown (no unsupported `> [!ALERT]` blocks, no emojis, no numbered lists), and final summary cell.
   - **`Polished Deliverable` Only**: Modular script extraction (`scripts/clean_XX_*.py`), `DATA_CLEANING_LOG.md`, Parquet checkpoints, `%%time` on every cell, `printmd()` styling. Do **not** penalize `quick` mode for omitting these.

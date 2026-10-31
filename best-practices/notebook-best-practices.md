@@ -13,6 +13,7 @@ All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-clea
 - **Zero Data Leakage**: Fit all scalers, imputers, tokenizers, and encoders strictly on training data after splitting.
 - **Secret Hygiene**: Never hardcode API keys or tokens; always load credentials via `from google.colab import userdata` or `os.environ`.
 - **Plot Quality & Subplot Discipline**: Every chart must have an explicit title, labeled axes (with units where applicable), and readable legends. Avoid subplots: default to one figure per plot (figsize 8x4); allow subplots only for direct comparison of the same variable (max 2 panels, sharey=True, figsize at least 12x4); call `plt.show()` after each figure.
+- **Library-First Modeling (Never Reinvent the Wheel)**: Always use established, battle-tested open-source libraries (e.g. `statsforecast`, `neuralforecast`, `darts`, `prophet` for time series; `scikit-learn`, `lightgbm`, `xgboost` for tabular; `transformers`, `timm` for deep learning). Never hand-roll model algorithms, manual forecasting recurrence loops, or DIY neural architectures from scratch.
 - **Reliable Package Installation**: Use `!{sys.executable} -m pip install -q ...` in a consolidated setup cell so packages install into the active kernel.
 - **Clean Colab Markdown & Formatting Restraints**: Never use unsupported GitHub alert syntax (`> [!WARNING]`, `> [!NOTE]`). Do not use emojis in notebook text, headers, or comments. Avoid numbered lists; use unordered bullet lists (`-`) or sub-headers instead.
 
@@ -145,6 +146,7 @@ All **Notebook Execution Subagents** (`env-setup-agent`, `eda-agent`, `data-clea
 - [ ] Secrets use `google.colab.userdata` or environment variables—zero plaintext keys.
 - [ ] Data provenance (source, size, shape) and early sanity assertions are logged on load.
 - [ ] Zero data leakage: preprocessing transformers are fit strictly on training splits.
+- [ ] Established domain libraries used for models (e.g. StatsForecast, NeuralForecast, LightGBM, Scikit-Learn)—zero hand-rolled / DIY model implementations.
 - [ ] Task-appropriate baseline model, evaluation metrics, and labeled visualizations are present (avoiding subplot grids; 8x4 single plots; max 2 comparison panels, sharey=True, 12x4; plt.show() after each).
 - [ ] Markdown cells use clean Colab-supported formatting (no raw `> [!ALERT]` blocks, no emojis, no numbered lists; bullet points or subheaders only).
 - [ ] Notebook concludes with a summary of results, limitations, and next steps.
