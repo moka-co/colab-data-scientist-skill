@@ -121,3 +121,38 @@ def test_no_hardcoded_user_paths():
         assert "Users\\tech" not in content and "Users/tech" not in content, (
             f"Hardcoded user path found in {path.relative_to(REPO_ROOT)}"
         )
+
+
+def test_group1_data_pipeline_agents():
+    """Verify Group 1 data-pipeline folder layout and extract->clean->transform->analyze contracts."""
+    dp_dir = REPO_ROOT / "agents" / "notebook" / "data-pipeline"
+    for name in ["env-setup-agent.md", "data-cleaning-agent.md", "eda-agent.md"]:
+        path = dp_dir / name
+        assert path.exists(), f"Missing Group 1 subagent spec: {path}"
+        assert not (REPO_ROOT / "agents" / "notebook" / name).exists(), (
+            f"Stale root subagent file still exists: agents/notebook/{name}"
+        )
+        text = path.read_text(encoding="utf-8")
+        assert "CELLS_TO_EXECUTE" in text, f"{name} missing CELLS_TO_EXECUTE"
+        assert "(../../best-practices/" not in text, f"{name} has shallow relative link"
+        assert "(../../../best-practices/" in text, f"{name} missing 3-level relative link"
+
+    cleaning_text = (dp_dir / "data-cleaning-agent.md").read_text(encoding="utf-8")
+    for token in [
+        'PHASE: "EXTRACT"',
+        'PHASE: "CLEAN_AND_TRANSFORM"',
+        "extract_data",
+        "clean_data",
+        "transform_data",
+        "unfitted_pipeline",
+        "scripts/pipeline_",
+    ]:
+        assert token in cleaning_text, f"data-cleaning-agent.md missing '{token}'"
+
+    eda_text = (dp_dir / "eda-agent.md").read_text(encoding="utf-8")
+    for token in [
+        'PHASE: "ANALYZE_AND_PLOT"',
+        "Findings & Modeling Recommendations",
+        "Column | Type | Domain Context | Meaning",
+    ]:
+        assert token in eda_text, f"eda-agent.md missing '{token}'"
