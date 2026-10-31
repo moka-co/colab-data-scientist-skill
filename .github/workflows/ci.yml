@@ -32,4 +32,4 @@ jobs:
         run: uvx ruff format --check .
 
       - name: Run Pytest
-        run: uvx --with pytest pytest
+        run: uvx --with pytest --with nbformat pytest

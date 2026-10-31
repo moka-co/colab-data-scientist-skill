@@ -1,7 +1,12 @@
 """Integrity tests for markdown links, line-index maps, and subagent contracts."""
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -221,3 +226,30 @@ def test_two_group_pipeline_and_gate_consistency():
         assert "post_cleaning" not in text, (
             f"Stale 'post_cleaning' gate found in {doc.relative_to(REPO_ROOT)}"
         )
+
+
+def test_python_files_pass_ruff_format_check():
+    """Ensure all Python files pass ruff format --check so CI does not fail."""
+    ruff_bin = shutil.which("ruff")
+    if ruff_bin:
+        cmd = [ruff_bin, "format", "--check", "."]
+    else:
+        uvx_bin = shutil.which("uvx")
+        if not uvx_bin and os.environ.get("APPDATA"):
+            candidates = sorted(Path(os.environ["APPDATA"]).glob("Python/*/Scripts/uvx.exe"))
+            if candidates:
+                uvx_bin = str(candidates[0])
+        if not uvx_bin:
+            pytest.skip("Neither ruff nor uvx is installed")
+        cmd = [uvx_bin, "ruff", "format", "--check", "."]
+
+    proc = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, f"ruff format --check failed:\n{proc.stdout}\n{proc.stderr}"
+
+
+def test_ci_workflow_includes_nbformat_test_dependency():
+    """Ensure CI runs pytest with nbformat installed so notebook validation tests never skip."""
+    ci_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "nbformat" in ci_text or "--extra dev" in ci_text, (
+        ".github/workflows/ci.yml must install nbformat (or dev extras) when running pytest"
+    )
