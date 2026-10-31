@@ -96,7 +96,7 @@ def test_subagent_contracts():
 
 
 def test_report_writer_agent_contract():
-    """Verify report-writer-agent enforces notebook source-of-truth, orchestrator boundary, and best practices."""
+    """Verify report-writer-agent enforces source-of-truth, orchestrator, and best practices."""
     rw_path = (
         REPO_ROOT / "agents" / "notebook" / "model-training-evaluation" / "report-writer-agent.md"
     )
@@ -115,7 +115,7 @@ def test_report_writer_agent_contract():
     # Verify the ## Results & Debrief template block uses bullets (-), not numbered lists (1.)
     template_part = text.rsplit("\n## Results & Debrief\n", 1)[1].split("```", 1)[0]
     assert "\n1. " not in template_part, (
-        "## Results & Debrief template must use unordered '-' bullets per notebook-best-practices.md"
+        "## Results & Debrief template must use '-' bullets per notebook-best-practices.md"
     )
 
 
@@ -163,7 +163,7 @@ def test_no_hardcoded_user_paths():
 
 
 def test_group1_data_pipeline_agents():
-    """Verify Group 1 data-pipeline folder layout and extract->clean->transform->analyze contracts."""
+    """Verify Group 1 data-pipeline layout and extract->clean->transform->analyze contracts."""
     dp_dir = REPO_ROOT / "agents" / "notebook" / "data-pipeline"
     for name in ["env-setup-agent.md", "data-cleaning-agent.md", "eda-agent.md"]:
         path = dp_dir / name
@@ -195,3 +195,29 @@ def test_group1_data_pipeline_agents():
         "Column | Type | Domain Context | Meaning",
     ]:
         assert token in eda_text, f"eda-agent.md missing '{token}'"
+
+
+def test_two_group_pipeline_and_gate_consistency():
+    """Ensure SKILL.md, README.md, best-practices, and references reflect the 2-group pipeline."""
+    skill_text = (REPO_ROOT / "SKILL.md").read_text(encoding="utf-8")
+    for required in [
+        "agents/notebook/data-pipeline/",
+        "agents/notebook/model-training-evaluation/",
+        "report-writer-agent",
+        "post_pipeline",
+        "DATA_PIPELINE_HANDOFF",
+    ]:
+        assert required in skill_text, f"SKILL.md missing '{required}'"
+
+    docs_to_check = [
+        REPO_ROOT / "SKILL.md",
+        REPO_ROOT / "README.md",
+        REPO_ROOT / "best-practices" / "notebook-best-practices.md",
+        *(REPO_ROOT / "references").glob("*.md"),
+        *(REPO_ROOT / "agents").rglob("*.md"),
+    ]
+    for doc in docs_to_check:
+        text = doc.read_text(encoding="utf-8")
+        assert "post_cleaning" not in text, (
+            f"Stale 'post_cleaning' gate found in {doc.relative_to(REPO_ROOT)}"
+        )
