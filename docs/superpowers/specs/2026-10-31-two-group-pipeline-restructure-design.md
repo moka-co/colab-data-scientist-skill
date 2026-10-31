@@ -145,26 +145,26 @@ Located at `agents/notebook/model-training-evaluation/critic-agent.md` and invok
 ### 5.4 `report-writer-agent` (Final Notebook Subagent)
 Located at `agents/notebook/model-training-evaluation/report-writer-agent.md`. Runs **last** in Group 2 after `model-training-agent`, `inference-agent` (if run), and `critic-agent` (`final` gate) have finished.
 
-- **`define_subagent` Configuration**:
+- **`define_subagent` Configuration & Orchestrator-Only Interaction (Consistent with All Notebook Subagents)**:
   - `name`: `report-writer-agent`
-  - `enable_mcp_tools`: `false` (Main Orchestrator executes all `colab-mcp` calls)
-  - `enable_write_tools`: `true` (Used strictly to write `report-writer-agent_tasks.md` and standalone `report.md` in `artifact_dir`)
-  - `enable_subagent_tools`: `false`
+  - `enable_mcp_tools`: `false` (Never calls `colab-mcp`, `gdrive`, or `ask_question` directly; only the Main Orchestrator executes notebook cells and user/Drive tools)
+  - `enable_write_tools`: `true` (Used strictly to write `report-writer-agent_tasks.md` and `report.md` in `artifact_dir`, matching the local write boundary of all notebook subagents)
+  - `enable_subagent_tools`: `false` (Never invokes or messages peer subagents; interacts **exclusively** with the Main Orchestrator via structured JSON return payloads and `send_message` feedback loops)
+- **The Executed Notebook Is the Single Source of Truth**:
+  - Exactly like `critic-agent`, `report-writer-agent` receives the ordered executed notebook **`cells`** (`cellId`, `cell_type`, `source`) and live **`outputs`** (stdout, stderr, metrics, return displays, and `[PLOT_RENDERED: ...]` descriptors) compiled by the Main Orchestrator, alongside `<subagent_name>_tasks.md` files for planning rationale.
+  - **Source-of-Truth Precedence Rule**: Executed notebook cells and their live outputs are **strictly authoritative**. `<subagent_name>_tasks.md` files provide intent and audit context, but every cited metric, shape, runtime, and conclusion MUST come from executed notebook outputs. If a task file disagrees with live notebook output, the notebook wins.
+  - **Colab Runtime Boundary & Optional Two-Step Loop (`EVIDENCE_AND_ERROR_ANALYSIS` → `WRITE_REPORT`)**: Because remote Colab VM files (`predictions.parquet`, model checkpoints) are not on local disk, `report-writer-agent` never attempts local file reads on Colab runtime paths. When derived error-analysis breakdowns, bootstrap intervals on saved predictions, or evidence plots are needed, it returns read-only code cells in `CELLS_TO_EXECUTE` (`PHASE: "EVIDENCE_AND_ERROR_ANALYSIS"`), the Main Orchestrator executes them in Colab and returns live stdout via `send_message`, and `report-writer-agent` then emits the final `## Results & Debrief` cells (`PHASE: "WRITE_REPORT"`)—or emits both in one pass if all required metrics and error breakdowns are already printed in upstream notebook outputs.
 - **Best-Practices Mandate**:
   - MUST adhere to [`best-practices/notebook-best-practices.md`](../../../best-practices/notebook-best-practices.md) (active `workflow_mode`: `quick` default vs. `polished`) and [`best-practices/data-science-libraries.md`](../../../best-practices/data-science-libraries.md):
     - **Colab Markdown Standards**: No unsupported GitHub alert blocks (`> [!WARNING]`, `> [!NOTE]`); use `> **Warning:** ...` or `> **Note:** ...`. Zero emojis in Markdown, comments, or outputs. No numbered lists (`1.`, `2.`) inside notebook Markdown cells—use unordered `-` bullet lists or `###` / `####` subheadings instead.
     - **Table Formatting**: Clean, concise single-line cells (no `<br>` or bullets inside cells; backticks only for identifiers/names).
     - **Plot Quality & Subplot Avoidance**: One plot per figure (`figsize=(8, 4)`), **no subplots**, explicit descriptive title, labeled axes with units, readable legends, `plt.show()` followed by `plt.close()`, plus a one-line Markdown caption per plot stating what it shows and why it matters.
     - **Mode Ceremony**: Concise section narrative in `Quick Exploration` mode; Markdown rationale before every plot/code cell and `printmd()` highlights in `Polished Deliverable` mode.
-- **Inputs (Provided by Main Orchestrator)**:
-  - Task definition (`task_modality`, `target_column`, business/academic goal, `primary_metric`, `workflow_mode`, `artifact_dir`)
-  - Dataset summary (`dataset-discovery-agent`) and key EDA findings (`eda-agent_tasks.md`)
-  - Cleaning & transformation summary (`data-cleaning-agent_tasks.md` + `PER_COLUMN_CHANGES`)
-  - Per-model results (`model-training-agent`: validation/test metrics, CV fold std if any, hyperparameters, training time, model size, `SELECTED_MODEL`)
-  - Inference outputs (`inference-agent`: `PREDICTIONS_PATH`, sample predictions, p50/p95 latency if measured)
-  - Critic audit report (`critic-agent_tasks.md`: issues found, severity, resolved vs. unresolved blocking issues)
-  - Paths to saved artifacts in Colab runtime / local artifact directory
-  - *Missing Input Rule*: Never invent missing metrics or facts; record any unverifiable items under **Missing information** and proceed with verified evidence.
+- **Inputs (Compiled and Passed Exclusively by the Main Orchestrator)**:
+  - Executed notebook `cells` and live `outputs` (**primary source of truth** for all dataset shapes, cleaning changes, model scores, timings, model sizes, latencies, and predictions)
+  - Session & task definition from `session-configuration.md` (`task_modality`, `target_column`, goal, `primary_metric`, `workflow_mode`, `artifact_dir`)
+  - Upstream `<subagent_name>_tasks.md` summaries (including `critic-agent_tasks.md` with resolved vs. unresolved blocking issues) for rationale and audit status
+  - *Missing Input Rule*: Never invent missing metrics or facts; record any item not verifiable in executed notebook outputs under **Missing information** and proceed with verified evidence.
 - **Core Responsibilities**:
   1. **Results Report (`## Results & Debrief`)**:
      - **Model Comparison Table**: One row per evaluated model (including baseline), sorted by `primary_metric`, reporting primary/secondary metrics, training time, and relevant constraints (size, latency).
@@ -176,10 +176,10 @@ Located at `agents/notebook/model-training-evaluation/report-writer-agent.md`. R
      - **What didn't**: Underperforming or low-ROI attempts and likely causes.
      - **Open risks**: Unresolved critic findings, dataset limitations, or production distribution-shift assumptions.
      - **Next steps**: 3–5 concrete, prioritized actions formatted as `-` bullets in Colab Markdown, each naming the target specialist subagent (`-> data-cleaning-agent`, `-> model-training-agent`, etc.).
-     - **Missing information**: Anything the report could not verify from execution outputs or artifacts.
+     - **Missing information**: Anything the report could not verify directly from executed notebook cell outputs.
 - **Strict Non-Experimentation Rules**:
-  - Never train, tune, refit, or re-run model evaluation. Derived statistics (metric deltas, ratios, bootstrap intervals, segment error breakdowns) may be computed strictly on already-persisted predictions/metrics.
-  - Every cited number must trace to an executed cell output or saved artifact without rank-altering rounding.
+  - Never train, tune, refit, or re-run model evaluation. Derived statistics (metric deltas, ratios, bootstrap intervals, segment error breakdowns) may be computed strictly on already-persisted predictions/metrics via Orchestrator-executed read-only cells.
+  - Every cited number must trace directly to an executed notebook cell output without rank-altering rounding.
   - Use calibrated language ("X outperforms Y" only when the margin exceeds measured variance; otherwise "X and Y are comparable").
 - **Outputs**:
   1. `CELLS` & `CELLS_TO_EXECUTE`: Notebook cells appending `## Results & Debrief` Markdown and inline single-figure evidence/error-analysis plot cells.
