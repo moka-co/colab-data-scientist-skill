@@ -44,25 +44,40 @@ def test_internal_markdown_links_resolve():
             )
 
 
-def test_subagent_contracts():
-    """Verify notebook subagents define CELLS_TO_EXECUTE and critic defines fix tiers."""
-    notebook_agents = [
-        "env-setup-agent.md",
-        "eda-agent.md",
-        "data-cleaning-agent.md",
-        "model-training-agent.md",
-        "inference-agent.md",
-    ]
-    for name in notebook_agents:
-        path = REPO_ROOT / "agents" / "notebook" / name
-        text = path.read_text(encoding="utf-8")
-        assert "CELLS_TO_EXECUTE" in text, f"{name} missing CELLS_TO_EXECUTE contract"
+def test_notebook_subagent_directory_layout():
+    """Ensure agents/notebook/ contains only data-pipeline/ and model-training-evaluation/ specs."""
+    nb_root = REPO_ROOT / "agents" / "notebook"
+    loose_md = list(nb_root.glob("*.md"))
+    assert loose_md == [], f"Found ungrouped .md files in agents/notebook/: {loose_md}"
 
-    critic_text = (REPO_ROOT / "agents" / "notebook" / "critic-agent.md").read_text(
-        encoding="utf-8"
-    )
+
+def test_subagent_contracts():
+    """Verify notebook subagents define CELLS_TO_EXECUTE and critic defines scopes & fix tiers."""
+    execution_agents = [
+        ("data-pipeline", "env-setup-agent.md"),
+        ("data-pipeline", "data-cleaning-agent.md"),
+        ("data-pipeline", "eda-agent.md"),
+        ("model-training-evaluation", "model-training-agent.md"),
+        ("model-training-evaluation", "inference-agent.md"),
+        ("model-training-evaluation", "report-writer-agent.md"),
+    ]
+    for group, name in execution_agents:
+        path = REPO_ROOT / "agents" / "notebook" / group / name
+        text = path.read_text(encoding="utf-8")
+        assert "CELLS_TO_EXECUTE" in text, f"{group}/{name} missing CELLS_TO_EXECUTE contract"
+        assert "`enable_mcp_tools`: `false`" in text or "**enable_mcp_tools**: `false`" in text
+        assert (
+            "`enable_subagent_tools`: `false`" in text
+            or "**enable_subagent_tools**: `false`" in text
+        )
+
+    critic_text = (
+        REPO_ROOT / "agents" / "notebook" / "model-training-evaluation" / "critic-agent.md"
+    ).read_text(encoding="utf-8")
     assert "SAFE_AUTO_FIXES" in critic_text
     assert "ESCALATED_FIXES" in critic_text
+    assert "post_pipeline" in critic_text
+    assert "post_cleaning" not in critic_text
 
     discovery_text = (REPO_ROOT / "agents" / "support" / "dataset-discovery-agent.md").read_text(
         encoding="utf-8"
@@ -78,6 +93,30 @@ def test_subagent_contracts():
         assert required_field in discovery_text, (
             f"dataset-discovery-agent.md missing required field '{required_field}'"
         )
+
+
+def test_report_writer_agent_contract():
+    """Verify report-writer-agent enforces notebook source-of-truth, orchestrator boundary, and best practices."""
+    rw_path = (
+        REPO_ROOT / "agents" / "notebook" / "model-training-evaluation" / "report-writer-agent.md"
+    )
+    text = rw_path.read_text(encoding="utf-8")
+    for required in [
+        "../../../best-practices/notebook-best-practices.md",
+        "../../../best-practices/data-science-libraries.md",
+        "## Results & Debrief",
+        "ORCHESTRATOR_SUMMARY",
+        "REPORT_PATH",
+        "source of truth",
+        "Missing information",
+    ]:
+        assert required in text, f"report-writer-agent.md missing '{required}'"
+
+    # Verify the ## Results & Debrief template block uses bullets (-), not numbered lists (1.)
+    template_part = text.rsplit("\n## Results & Debrief\n", 1)[1].split("```", 1)[0]
+    assert "\n1. " not in template_part, (
+        "## Results & Debrief template must use unordered '-' bullets per notebook-best-practices.md"
+    )
 
 
 def test_data_science_libraries_line_map():
