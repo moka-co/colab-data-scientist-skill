@@ -78,49 +78,47 @@ Antigravity automatically discovers skills in `~/.gemini/config/skills/` and `.a
 
 ```mermaid
 flowchart TD
-    User([User]) --> Orchestrator[Main Orchestrator]
+    User([User]) --> Orch[Main Orchestrator]
 
-    subgraph SupportGroup["Orchestrator Support Subagents (Notebook-Independent)"]
-        Discovery["dataset-discovery-agent\n(Kaggle, HuggingFace, Google Dataset Search, UCI, OpenML)"]
+    subgraph Support["Support · no notebook"]
+        Discovery[dataset-discovery-agent]
     end
+    Orch <-.->|standalone search| Discovery
 
-    Orchestrator <-->|"Standalone Domain Research\nOR Pre-Notebook Discovery\n(SELECTED_DATASET Hand-off)"| Discovery
+    Orch --> Config["Session config<br/>mode · engine · scope · consent"]
 
-    subgraph NotebookGroup["Notebook Execution Workflow (Two Modular Phase Groups)"]
+    subgraph G1["Group 1 · Data Pipeline"]
         direction TB
-        A["0. Mode, Engine, Scope & Consent\n(session-configuration.md + task.md)"]
-
-        subgraph Group1["Group 1: Data Pipeline (agents/notebook/data-pipeline/)"]
-            direction TB
-            B["1. Environment Probe & Setup\n(env-setup-agent: 2-step loop)"]
-            C["2. Extract -> Clean -> Transform\n(data-cleaning-agent: EXTRACT -> CLEAN_AND_TRANSFORM)"]
-            D["3. Analyze & Plot (EDA)\n(eda-agent: ANALYZE_AND_PLOT)"]
-            B --> C --> D
-        end
-
-        G1_Gate{"Critic Gate 1\n(critic-agent: post_pipeline)\n-> DATA_PIPELINE_HANDOFF"}
-
-        subgraph Group2["Group 2: Model Selection & Evaluation (agents/notebook/model-training-evaluation/)"]
-            direction TB
-            E["4. Phased Model Selection & Training\n(model-training-agent: Baseline -> Tuning)"]
-            G2_Gate{"Critic Gate 2\n(critic-agent: post_baseline)"}
-            F["5. Memory-Safe Inference\n(inference-agent)"]
-            G3_Gate{"Critic Gate 3\n(critic-agent: final)"}
-            R["6. Final Results & Debrief\n(report-writer-agent: notebook + report.md)"]
-            E --> G2_Gate --> F --> G3_Gate --> R
-        end
-
-        H["7. Export & Optional Drive Sync\n(export_to_ipynb + gdrive)"]
-
-        A --> B
-        D --> G1_Gate
-        G1_Gate -->|"full_workflow"| E
-        G1_Gate -->|"data_pipeline_only"| H
-        R --> H
+        Env[env-setup-agent] --> Clean["data-cleaning-agent<br/>EXTRACT → CLEAN_AND_TRANSFORM"]
+        Clean --> EDA["eda-agent<br/>ANALYZE_AND_PLOT"]
+        EDA --> C1{{"critic · post_pipeline"}}
     end
 
-    Orchestrator --> A
+    subgraph G2["Group 2 · Model Selection & Evaluation"]
+        direction TB
+        Train["model-training-agent<br/>baseline → tuning"] --> C2{{"critic · post_baseline"}}
+        C2 --> Inf[inference-agent] --> C3{{"critic · final"}}
+        C3 --> Report[report-writer-agent]
+    end
+
+    Export["Export .ipynb<br/>+ optional Drive sync"]
+
+    Config --> Env
+    Discovery -.->|SELECTED_DATASET| Clean
+    C1 -->|"DATA_PIPELINE_HANDOFF<br/>(full_workflow)"| Train
+    C1 -->|data_pipeline_only| Export
+    C2 -.->|SUSPECTED_LEAKAGE| Clean
+    Report -->|"notebook + report.md"| Export
+
+    classDef agent fill:#e8f0fe,stroke:#4a6fa5,color:#1a1a1a
+    classDef gate fill:#fff4e5,stroke:#d08c00,color:#1a1a1a
+    classDef io fill:#eef7ee,stroke:#3c8d3c,color:#1a1a1a
+    class Env,Clean,EDA,Train,Inf,Report,Discovery agent
+    class C1,C2,C3 gate
+    class Config,Export io
 ```
+
+Dashed edges are optional hand-offs or loop-backs. Any critic gate can also escalate `ESCALATED_FIXES` to the user.
 
 - **Standalone Support Mode (No Notebook Required)**: Run `dataset-discovery-agent` standalone to search Kaggle, HuggingFace Datasets, Google Dataset Search, OpenML, and UCI without opening Colab. Hands off a reproducible `SELECTED_DATASET` payload directly to Group 1 (`data-cleaning-agent`).
 - **Group 1 — Data Pipeline (`agents/notebook/data-pipeline/`)**:

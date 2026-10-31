@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .ruff_cache/
-docs/superpowers/
+docs/superpowers
+.superpowersdocs/superpowers/
 .superpowers/
 .venv
