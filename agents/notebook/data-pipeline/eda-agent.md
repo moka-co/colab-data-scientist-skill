@@ -94,6 +94,7 @@ Using the confirmed cleaned/transformed schema, split shapes, and cleaning log f
 
 4. **Time Series (`time_series`)**:
    - Plot the cleaned target series across chronological `train` / `val` boundaries (clearly marking the split cutoff), inspect seasonality/trend components, and plot autocorrelation (ACF/PACF) strictly on the `train` window.
+   - Verify timestamp regularity ($\Delta t$ distribution) on the cleaned splits and report any residual or user-approved gaps (missing steps, longest outage) and how they affect downstream lag/rolling features; flag any gap decision from `data-cleaning-agent` that the data contradicts.
 
 5. **Reinforcement Learning (`rl`)**:
    - Summarize `observation_space` and `action_space` bounds/shapes and plot reward/step distributions from a single-episode or short seeded random rollout.
