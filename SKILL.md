@@ -53,46 +53,10 @@ Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.
 3. **Composable Extract, Clean & Transform (`data-cleaning-agent`)**:
    - Pass `task_modality`, `dataset_source` (`SELECTED_DATASET`), `dataframe_engine`, `artifact_dir` (+ optional `target_column`, `workflow_mode`, `intended_model_family`).
    - Run `PHASE: "EXTRACT"` (`extract_data()` immutable load, pinned provenance, raw schema/null/sentinel/duplicate probe) and loop live stdout back via `send_message`.
-   - Run `PHASE: "CLEAN_AND_TRANSFORM"` (`clean_data()` ordered hygiene + Per-Column Log $\rightarrow$ pre-split dedup & leak-free split + `train.parquet`/`val.parquet`/`test.parquet` $\rightarrow$ `transform_data()` + `unfitted_pipeline` + train-fitted `preprocessor`). Prompt via `ask_question` if `STATUS: "NEEDS_USER_CONFIRMATION"` (`> 5%` row drop or non-ID column drop).
+   - Run `PHASE: "CLEAN_AND_TRANSFORM"` (`clean_data()` ordered hygiene + Per-Column Log $\rightarrow$ pre-split dedup & leak-free split + `train.parquet`/`val.parquet`/`test.parquet` $\rightarrow$ `transform_data()` + `unfitted_pipeline` + train-fitted `preprocessor`). Prompt via `ask_question` if `STATUS: "NEEDS_USER_CONFIRMATION"` (`> 5%` row drop, non-ID column drop, or time-series timestamp gaps and their lag/window trade-offs).
 4. **Post-Transform Analysis & Plotting (`eda-agent`)**: Pass `pipeline_variables` and `schema_and_cleaning_summary`. Execute single-pass `PHASE: "ANALYZE_AND_PLOT"` (mandatory Dataset Overview & 4-column Feature Glossary Text Cell, strict `train`-only target diagnostics, `8x4` single-figure plots, and `## Findings & Modeling Recommendations` in `eda-agent_tasks.md`).
 5. **Group 1 Boundary Audit & `DATA_PIPELINE_HANDOFF`**: Invoke `critic-agent` with `scope: "post_pipeline"`. Apply `< 5s` leaf `SAFE_AUTO_FIXES`; confirm `ESCALATED_FIXES` via `ask_question`. Package `DATA_PIPELINE_HANDOFF` (`split_objects`, `parquet_checkpoints`, `unfitted_pipeline`, `fitted_preprocessor`, `per_column_changes`, `eda_findings`). Stop and export if scope is `data_pipeline_only`.
 
-<<<<<<< HEAD
-### 2. Colab Connection, Iterative Subagent Execution & Error Recovery
-Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.md) when connecting to Colab or handling errors. For each required phase in `task.md`:
-1. **Line-Range Library Lookup & Mandatory Library-First Policy**:
-   - Never read all of [`best-practices/data-science-libraries.md`](best-practices/data-science-libraries.md). Read only its **Section-to-Line Index Map** (lines 35–68), then call `view_file` with `StartLine` and `EndLine` for the relevant domain section.
-   - **Library-First Rule**: Models MUST use established open-source libraries (e.g., `statsforecast` / `neuralforecast` for time series, `lightgbm`/`xgboost`/`scikit-learn` for tabular, `timm` for CV); never hand-roll model architectures or forecasting math from scratch.
-   - Inject **at most 5 library tips** (name + `pip` package only), filtered by `Engine Compatibility`. Priority hierarchy: **User preference > Colab Runtime constraints > Orchestrator suggestions**.
-2. **Two-Step Environment Setup Loop (`env-setup-agent`)**:
-   - **Default Assumption**: Assume Colab pre-installs relevant libraries by default; only check for missing packages (unless importing a repo with specific required dependencies).
-   - **Step 1 (Probe)**: Invoke `env-setup-agent` to receive its minimal probe cell (`!pip list` under `STEP: "PROBE"`). Execute in Colab and send stdout back via `send_message`.
-   - **Step 2 (Plan & Validation)**: Receive the final structured payload with installs targeting only missing packages. If `INCOMPATIBLE` is reported (e.g. Python version mismatch or conda-only packages), halt and report to the user. If `HARDWARE_MISMATCH` is reported (e.g., `wants GPU, found CPU`), prompt the user via `ask_question` to switch Colab runtime (*Runtime* $\rightarrow$ *Change runtime type*) before continuing.
-   - **Restart & Resume Protocol**: If `REQUIRES_RESTART: true`, place the install cell first in the notebook (`index: 0`) and run it. Immediately restart the Colab runtime (via `open_colab_browser_connection` / runtime restart), warn the user that variables are reset, and run only the subsequent verification/smoke-test cell before proceeding.
-3. **Two-Phase Adaptive EDA Loop (`eda-agent`)**:
-   - Pass required inputs (`task_modality`, `dataset_source`, `dataframe_engine`, `artifact_dir`) and optional inputs (`target_column`, `workflow_mode`, `split_info`). If it returns `STATUS: "NEEDS_INPUT"`, prompt user via `ask_question`.
-   - Run Phase 1 inspection cells (`PHASE: "INSPECT"`), ensuring it includes the mandatory extra introductory Text Cell explaining the dataset, feature meanings, sample counts, and collector/publication date. Loop back outputs via `send_message` so `eda-agent` drafts Phase 2 diagnostics (`PHASE: "VISUALIZE_AND_DIAGNOSE"`) and updates `eda-agent_tasks.md` with verified `## Findings`.
-4. **Ordered Cleaning & Leak-Free Splitting (`data-cleaning-agent`)**:
-   - Pass inputs (`task_modality`, `dataframe_engine`, `artifact_dir`, `target_column`, `id_columns`, `group_column`, `intended_model_family`, `workflow_mode`).
-   - If `STATUS: "NEEDS_USER_CONFIRMATION"` is returned (e.g., dropping $> 5\%$ rows, dropping non-trivial columns, or resolving time-series timestamp gaps and their trade-offs for lag/window construction), surface the findings/trade-offs and prompt the user via `ask_question` so you can align on the strategy before executing.
-   - Execute cleaning, pre-split deduplication, and Parquet checkpointing. Invoke `critic-agent` with `scope: "post_cleaning"`. If data leakage or split overlap is detected, resolve before training. Pass unfitted pipeline and clean split frames to `model-training-agent`.
-5. **Phased Model Training & Leakage Tripwire (`model-training-agent`)**:
-   - Mandate battle-tested domain libraries (e.g., `statsforecast`, `neuralforecast`, `darts` for time series; `lightgbm`, `scikit-learn` for tabular)—strictly forbid custom from-scratch model implementations. Anticipate modeling dependencies during setup (install `ADDITIONAL_PACKAGES` at the top setup cell).
-   - Execute Phase 1 (`PHASE: "BASELINE"`), capture validation score and `%%time` duration. Invoke `critic-agent` with `scope: "post_baseline"`. If metric triggers the "too good" tripwire (`STATUS: "SUSPECTED_LEAKAGE"`), halt and route back to EDA/cleaning. Otherwise, loop back via `send_message`.
-   - Execute Phase 2 (`PHASE: "CANDIDATES_AND_TUNING"`) within the compute budget.
-   - Pass the verified `SELECTED_MODEL` payload (full fitted pipeline, feature order, label mapping, decision threshold, load snippet) directly to `inference-agent`.
-6. **Inference Execution & Prediction Persistence (`inference-agent`)**:
-   - Each subagent writes its plan/rationale/invariants to `<subagent_name>_tasks.md` and returns executable cells separately in `CELLS_TO_EXECUTE`.
-   - Pass `selected_model` and `inference_data`. If missing or ambiguous, prompt user via `ask_question` **before** invoking `inference-agent`.
-   - Execute memory cleanup, resilient loading (in-memory with checkpoint fallback), schema/skew assertions, modality inference pipeline, and persist predictions to disk (`PREDICTIONS_PATH`).
-   - If a cell fails, hits OOM, or returns an unexpected schema, send live traceback/stdout back via `send_message` (up to 2 retries) for a patched cell before asking the user.
-
-### 3. Multi-Gate Critic Audits (`critic-agent`)
-- Reused across 3 gates (`post_cleaning`, `post_baseline`, `final`). For each gate, pass `scope`, cells, truncated outputs (head/tail/signals, with images stripped to `[PLOT_RENDERED: ...]`), active `workflow_mode`, and relevant task files.
-- **Objective Fact-Checking & Implementation Integrity**: Fact-checks dataset claims against outputs; verifies models use established libraries (rejects hand-rolled/DIY implementations).
-- **Apply `SAFE_AUTO_FIXES` Automatically**: Fast (`< 5s`), non-destructive leaf/display fixes (e.g., plot labels, formatting, printing already-computed metrics, summary markdown).
-- **Confirm `ESCALATED_FIXES` With User First**: Never auto-apply changes to **model training cells** or **upstream data-mutating cells** (data leakage, split contamination, metric tripwires, hand-rolled model replacements). Present `ESCALATED_FIXES` via `ask_question` first.
-=======
 ### 3. Group 2 Orchestration — Model Selection & Evaluation
 1. **Phased Model Selection & Leakage Tripwire (`model-training-agent`)**:
    - Pass `DATA_PIPELINE_HANDOFF` (or resumed Group 1 checkpoints); install any `ADDITIONAL_PACKAGES` in the top setup cell.
@@ -101,7 +65,6 @@ Read [`references/colab-mcp-and-recovery.md`](references/colab-mcp-and-recovery.
 2. **Memory-Safe Inference (`inference-agent`, when applicable)**: Confirm `inference_data` if ambiguous (`ask_question`), run VRAM/RAM cleanup, resilient loading, train/serve skew assertions, modality inference, and save predictions to `PREDICTIONS_PATH`.
 3. **Final Process Audit (`critic-agent`, `scope: "final"`)**: Run **before** `report-writer-agent` (passing cells, head/tail/signal truncated outputs with `[PLOT_RENDERED: ...]` descriptors, `workflow_mode`, and task files). Auto-apply `SAFE_AUTO_FIXES`; escalate `ESCALATED_FIXES` via `ask_question`; record any unresolved blocking issues in `critic-agent_tasks.md`.
 4. **Final Results Report & Debrief (`report-writer-agent`)**: Pass ordered executed notebook `cells` and live `outputs` (**authoritative source of truth** over `<subagent>_tasks.md`) + `session-configuration.md` + task summaries (including `critic-agent_tasks.md`). If it emits `PHASE: "EVIDENCE_AND_ERROR_ANALYSIS"`, execute read-only slice/plot cells and loop stdout back via `send_message`; then execute `PHASE: "WRITE_REPORT"` appending `## Results & Debrief`, saving standalone `report.md`, and surfacing `ORCHESTRATOR_SUMMARY`.
->>>>>>> dev
 
 ### 4. Notebook Export & Google Drive Sync
 Follow [`references/drive-sync-and-export.md`](references/drive-sync-and-export.md) to assemble `.ipynb` via `scripts/export_to_ipynb.py`. If Drive sync is enabled, prompt via `ask_question` with a recommended path (`Colab Notebooks/<NotebookName>.ipynb`); user-provided paths or hints strictly take precedence.

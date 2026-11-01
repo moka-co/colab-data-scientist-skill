@@ -61,6 +61,7 @@ Return a focused batch of extraction and inspection cells:
    - Local/remote files: compute a chunked SHA256 hash (64 KB chunks) if file size is `< 100 MB`. If `size >= 100 MB`, record the exact byte size, file modification time, and a 1,000-row sample fingerprint to avoid freezing on multi-GB files.
 3. **Raw Schema & Hygiene Probe**:
    - Print exact raw shape, column names, dtypes, null/missing counts, suspected sentinel placeholders (`-999`, `"?"`, `"-1"`, `"N/A"`, empty/whitespace strings), exact duplicate row count, ID/group/datetime column candidates (e.g. cardinality ratio `> 0.99`, `patient_id`, `store_id`), and 3–5 representative sample rows.
+   - **Time Series Gap Probe** (`task_modality == "time_series"`): omitted timestamps are *implicit* nulls invisible to `.isna()`. Sort chronologically (per entity/group for panel data) and compare observed timestamps against a complete regular frequency grid (`date_range` / `upsample` at native step $\Delta t$); print missing step count, gap-length distribution, and longest outage.
    - For lazy engines (DuckDB, PySpark): use native idioms (`COUNT(*)`, schema descriptions); never call `.memory_usage()`.
 
 Return these cells under `PHASE: "EXTRACT"`. The Orchestrator executes them in Colab and loops the live stdout back via `send_message`.
@@ -85,7 +86,7 @@ Driven strictly by the verified `EXTRACT` stdout (never guess column names or ru
    3. *Category Normalization*: Strip leading/trailing whitespace, enforce consistent casing, and map canonical typos.
    4. *Pre-Split Deduplication*: Deduplicate identical rows (or normalized text hashes for NLP) **before** splitting to prevent train/test contamination.
    5. *Domain Bounds & Units*: Validate impossible values (e.g., negative ages, percentages $> 100$) and ensure unit consistency.
-   6. *Non-Leaking Missing-Value Rules*: Drop a column only if missingness $> 70\%$ (subject to user confirmation guardrail below); retain missingness indicators or defer statistical imputation (`median`/`mode`) to the train-fitted `transform_data` pipeline so validation/test statistics never leak into training!
+   6. *Non-Leaking Missing-Value Rules & Temporal Contiguity*: For time-indexed data, inspect time-step deltas ($\Delta t$) against the regular frequency grid before imputing or creating lags. Drop a column only if missingness $> 70\%$ (subject to user confirmation guardrail below); retain missingness indicators or defer statistical imputation (`median`/`mode`) to the train-fitted `transform_data` pipeline so validation/test statistics never leak into training!
    7. *Outliers*: Apply domain bounds or train-fitted winsorization/clipping inside the transformation pipeline rather than silent row deletion.
 
 3. **Per-Column Changes Reporting**:
@@ -97,7 +98,8 @@ Driven strictly by the verified `EXTRACT` stdout (never guess column names or ru
    - Dropping any feature column that isn't clearly a constant or unique ID.
    - Any class disappearing or dropping below minimum threshold ($< 5$ samples).
    - Dropping rows with missing target labels (modeling decision).
-   Return `STATUS: "NEEDS_USER_CONFIRMATION"` with `PROMPT` and `OPTIONS` so the Orchestrator asks the user via `ask_question`.
+   - **Non-trivial timestamp gaps or irregular intervals in Time Series / Temporal tasks**: there is no one-size-fits-all strategy for missing time steps, and row-based lag/rolling features silently break across gaps, so surface the gap profile (missing step count, gap length distribution, longest outage, affected lag windows) and trade-offs to the Orchestrator and user.
+   Return `STATUS: "NEEDS_USER_CONFIRMATION"` with a detailed `PROMPT` (exact counts/gaps and trade-offs) and `OPTIONS` so the Orchestrator asks the user via `ask_question`.
 
 5. **Leak-Free Split Design & Parquet Checkpoints**:
    - *Pre-Split Data Policy*: Honor official shipped train/test partitions when present.
@@ -118,7 +120,11 @@ Driven strictly by the verified `EXTRACT` stdout (never guess column names or ru
    - Do NOT blindly assert `no nulls` when `intended_model_family == "gbdt"` (`LightGBM`, `XGBoost`, `CatBoost` natively handle nulls). Assert zero unexpected nulls only on columns/pipelines requiring complete imputation.
    - *NLP*: Assert zero empty strings after cleaning; log % tokens truncated at `max_length`; scan for PII; preserve raw text alongside token IDs.
    - *CV*: Assert zero unreadable images on verified subset; compute normalization stats strictly on train (or use backbone stats); set `num_workers=2`; persist label-to-index mapping.
-   - *Time Series*: Cap forward-fill length (flag filled timestamps); record invertible target transforms (log, differencing) for inverse-transforming at inference.
+   - *Time Series & Temporal Lag Integrity*:
+     - **Implicit Gap Detection & Time-Grid Regularization**: Using the `EXTRACT` gap probe, quantify missing steps, gap duration distribution, and max outage length against a complete regular frequency grid (per entity/group if panel data).
+     - **Notify Orchestrator & User on Gap Trade-Offs**: Never silently guess how to bridge non-trivial gaps. Return `STATUS: "NEEDS_USER_CONFIRMATION"` with the gap summary and options (e.g., *Option 1*: reindex to regular grid, causal `ffill(limit=K)` for short gaps $\le K$ + `is_gap_imputed` flag, keep long outages as `NaN` and drop rows with incomplete lag windows; *Option 2*: segment into contiguous gap-free sub-series before windowing; *Option 3*: resample to a coarser frequency or use explicit elapsed-time $\Delta t$ features instead of fixed-step lags).
+     - **Lag & Rolling Window Contiguity Invariant**: **Never apply row-based `.shift(k)` or `.rolling(w)` on an irregular or gapped timestamp index** (shifting 1 row across a 5-hour gap pairs `t` with `t - 5h` instead of `t - 1h`). Regularize the time grid *before* computing lags/rolling stats so unbridged gaps become explicit `NaN` rows, or assert/mask any row where `timestamp - timestamp.shift(k) != k * delta_t`.
+     - **Causal Imputation & Invertible Transforms**: Cap forward-fill length (`ffill(limit=K)`) with an indicator flag; never use two-sided interpolation across splits or before lagging where it leaks future values. Record invertible target transforms (log, differencing) for inverse-transforming at inference.
    - *Class Imbalance*: Resampling or class-reweighting applies strictly to `train` (`X_train`, `y_train`); never touch `val` or `test`.
 
 ---

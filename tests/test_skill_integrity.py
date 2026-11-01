@@ -81,16 +81,13 @@ def test_subagent_contracts():
     ).read_text(encoding="utf-8")
     assert "SAFE_AUTO_FIXES" in critic_text
     assert "ESCALATED_FIXES" in critic_text
-<<<<<<< HEAD
-    cleaning_text = (REPO_ROOT / "agents" / "notebook" / "data-cleaning-agent.md").read_text(
-        encoding="utf-8"
-    )
-    assert "Lag & Rolling Window Contiguity Invariant" in cleaning_text
-    assert "Implicit Gap Detection & Time-Grid Regularization" in cleaning_text
-=======
     assert "post_pipeline" in critic_text
     assert "post_cleaning" not in critic_text
->>>>>>> dev
+    cleaning_text = (
+        REPO_ROOT / "agents" / "notebook" / "data-pipeline" / "data-cleaning-agent.md"
+    ).read_text(encoding="utf-8")
+    assert "Lag & Rolling Window Contiguity Invariant" in cleaning_text
+    assert "Implicit Gap Detection & Time-Grid Regularization" in cleaning_text
 
     discovery_text = (REPO_ROOT / "agents" / "support" / "dataset-discovery-agent.md").read_text(
         encoding="utf-8"
